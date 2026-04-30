@@ -1456,7 +1456,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-4);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--sp-4)) var(--sp-4) var(--sp-4);
   border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }

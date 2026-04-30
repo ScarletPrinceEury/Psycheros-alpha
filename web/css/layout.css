@@ -51,18 +51,19 @@ body.glass-enabled .bg-overlay {
 }
 
 body.glass-enabled .sidebar,
-body.glass-enabled .header,
 body.glass-enabled .input-area {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
-body.glass-enabled .sidebar {
+/* Header stays fully opaque even in glass mode */
+body.glass-enabled .header {
+  background-color: var(--c-bg-raised);
   border-color: var(--glass-border);
 }
 
-body.glass-enabled .header {
+body.glass-enabled .sidebar {
   border-color: var(--glass-border);
 }
 

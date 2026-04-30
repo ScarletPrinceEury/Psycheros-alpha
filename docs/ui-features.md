@@ -4,7 +4,7 @@ Detailed documentation for Psycheros web UI features.
 
 ## Context Inspector
 
-Built-in debugging tool for inspecting the full context sent to the LLM. Toggle via the code icon (`</>`) in the header.
+Built-in debugging tool for inspecting the full context sent to the LLM. Toggle via the code icon (`</>`) in the header. The drawer panel uses `env(safe-area-inset-top)` padding on its header to keep the close button accessible below the iOS status bar on PWA installs.
 
 ## UI Component Patterns
 
@@ -196,7 +196,7 @@ Customizable UI theming. Access via Settings → General Settings → Theme tab.
 
 ### Glass Effect
 
-Frosted glass (glassmorphism) effect on UI panels when background is active. Uses `backdrop-filter: blur()` with semi-transparent backgrounds. Automatically hides dark overlay when enabled.
+Frosted glass (glassmorphism) effect on UI panels when background is active. Uses `backdrop-filter: blur()` with semi-transparent backgrounds. Automatically hides dark overlay when enabled. The header is excluded from the glass effect to remain fully opaque, preventing background content from bleeding through the logo and header controls.
 
 ### Persistence
 
