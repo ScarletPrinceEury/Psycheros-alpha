@@ -409,7 +409,7 @@ export async function importEntityData(ctx: RouteContext, zipData: Uint8Array): 
     if (psycherosParts.vault) {
       const vaultFolder = zip.folder("psycheros/vault");
       if (vaultFolder) {
-        const vaultDocsDir = join(ctx.projectRoot, "data", "vault", "documents", "global");
+        const vaultDocsDir = join(ctx.projectRoot, ".psycheros", "vault", "documents", "global");
         await ensureDir(vaultDocsDir);
 
         // Clear existing vault chunks and documents
@@ -441,7 +441,7 @@ export async function importEntityData(ctx: RouteContext, zipData: Uint8Array): 
               title,
               basename,
               ext,
-              join("data", "vault", "documents", "global", basename),
+              join(".psycheros", "vault", "documents", "global", basename),
               bytes.length,
               now,
               now,

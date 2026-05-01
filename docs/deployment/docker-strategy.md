@@ -41,7 +41,7 @@ Three persistent volumes needed. Psycheros `identity/` and `memories/` are ephem
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
 | `entity-core-data` | `/app/entity-core/data/` | Canonical identity, memories, graph.db |
-| `psycheros-db` | `/app/Psycheros/.psycheros/` | SQLite (conversations, RAG index) |
+| `psycheros-db` | `/app/Psycheros/.psycheros/` | SQLite (conversations, RAG index), vault documents, chat attachments, generated images, settings |
 | `psycheros-snapshots` | `/app/Psycheros/.snapshots/` | Identity backups |
 
 ## Environment Variables

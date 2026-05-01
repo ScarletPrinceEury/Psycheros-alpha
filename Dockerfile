@@ -122,6 +122,7 @@ RUN cd /app/Psycheros && timeout 10s deno run -A --unstable-cron src/main.ts || 
 RUN mkdir -p \
     /app/Psycheros/.snapshots \
     /app/Psycheros/.psycheros/backgrounds \
+    /app/Psycheros/.psycheros/vault \
     /app/entity-core/data
 
 EXPOSE 3000

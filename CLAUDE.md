@@ -167,7 +167,8 @@ Image generation and visual analysis configured via Settings > Vision (top-level
 **Tool execution concurrency**: `ToolRegistry.executeAll()` uses a promise mutex to serialize tool execution across concurrent turns, preventing race conditions on shared resources (identity files, knowledge graph, memories).
 
 **User data protection**:
-- `identity/`, `.snapshots/`, `data/vault/` are **runtime-only directories** — gitignored, never committed
+- `identity/`, `.snapshots/` are **runtime-only directories** — gitignored, never committed
+- Vault documents are stored inside `.psycheros/vault/documents/` (persisted via the `.psycheros/` volume mount in Docker)
 - To change identity defaults, edit `templates/identity/` (committed). `src/init/mod.ts` seeds `identity/` from templates on first run if empty. Vault documents in `templates/vault/` are seeded into the global Data Vault on first startup. **Never `git add` files from `identity/`** — they contain user-specific entity data.
 - Entity-core is canonical source for identity and memories; local `identity/` is a cache when MCP is enabled. Memories are stored exclusively in entity-core via MCP.
 

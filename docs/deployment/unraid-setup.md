@@ -60,7 +60,7 @@ All MCP-related variables are pre-configured in the image — do not set them un
 
 **What's in each volume:**
 - **entity-core-data** — The entity's canonical identity, memories, and knowledge graph. This is the most important volume. On first run, it's seeded with default identity templates.
-- **db** — Conversation history and RAG search index. Losing this means losing chat history (but memories are safe in entity-core-data).
+- **db** — Conversation history, RAG search index, vault documents, chat attachments, generated images, and all settings. Losing this means losing chat history and vault data (but memories are safe in entity-core-data).
 - **snapshots** — Identity file backups. Nice to have but not critical.
 
 ## First Run
@@ -129,5 +129,5 @@ Back up `/mnt/user/appdata/psycheros/` — all three subdirectories.
 
 Priority:
 1. **entity-core-data/** — the entity's identity and memories (irreplaceable)
-2. **db/** — conversation history (large, but recoverable from memories)
+2. **db/** — conversation history, vault documents, generated images, settings (large, but memories are safe in entity-core-data)
 3. **snapshots/** — identity backups (redundant if entity-core-data is backed up)

@@ -741,6 +741,60 @@ function runMigrations(db: Database): void {
     `);
     console.log("[DB] Created anchor_images table");
   }
+
+  // Migration: Move vault document files from data/vault/ to .psycheros/vault/
+  // Vault files were stored in the container writable layer (data/vault/documents/)
+  // which is lost on container recreation. Move them to .psycheros/vault/documents/
+  // which lives on the persisted .psycheros/ volume mount.
+  try {
+    const oldRows = db
+      .prepare(
+        "SELECT id, file_path FROM vault_documents WHERE file_path LIKE '%/data/vault/documents/%'"
+      )
+      .all<{ id: string; file_path: string }>();
+
+    if (oldRows.length > 0) {
+      let moved = 0;
+      let missing = 0;
+
+      for (const row of oldRows) {
+        const newPath = row.file_path.replace(
+          /\/data\/vault\/documents\//,
+          "/.psycheros/vault/documents/"
+        );
+
+        try {
+          // Ensure target directory exists
+          const parentDir = newPath.substring(0, newPath.lastIndexOf("/"));
+          Deno.mkdirSync(parentDir, { recursive: true });
+
+          // Move file if it exists on disk
+          try {
+            Deno.copyFileSync(row.file_path, newPath);
+            Deno.removeSync(row.file_path);
+            moved++;
+          } catch {
+            // File doesn't exist on disk (already lost) — just update the path
+            missing++;
+          }
+
+          // Update the DB record regardless
+          db.exec("UPDATE vault_documents SET file_path = ? WHERE id = ?", [
+            newPath,
+            row.id,
+          ]);
+        } catch {
+          // Skip this row if migration fails
+        }
+      }
+
+      console.log(
+        `[DB] Migrated ${moved} vault file(s) to .psycheros/vault/, ${missing} file(s) missing (path updated only)`
+      );
+    }
+  } catch {
+    // vault_documents table doesn't exist yet — skip
+  }
 }
 
 /**

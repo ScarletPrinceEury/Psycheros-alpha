@@ -447,7 +447,9 @@ export class VaultManager {
    * Get the vault storage directory for a given scope.
    */
   private getVaultDir(opts: VaultCreateOptions): string {
-    const baseDir = join(this.projectRoot, "data", "vault", "documents");
+    // Store vault files inside .psycheros/ so they persist across Docker
+    // container recreations (the .psycheros/ directory is a volume mount).
+    const baseDir = join(this.projectRoot, ".psycheros", "vault", "documents");
     if (opts.scope === "chat" && opts.conversationId) {
       return join(baseDir, `chat-${opts.conversationId}`);
     }
