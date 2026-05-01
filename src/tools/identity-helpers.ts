@@ -95,6 +95,7 @@ export function updateSection(
   newSectionContent: string,
 ): { content: string; found: boolean; created: boolean } {
   const content = existingContent.trim();
+  const safeContent = stripLeadingHeading(newSectionContent, sectionName);
 
   const headingPattern = new RegExp(
     `^(#{2,3})\\s*${escapeRegex(sectionName)}\\s*$`,
@@ -104,7 +105,7 @@ export function updateSection(
 
   if (!match) {
     // Section doesn't exist — create it at the end of the file
-    const newSection = `\n\n## ${sectionName}\n${newSectionContent.trim()}`;
+    const newSection = `\n\n## ${sectionName}\n${safeContent}`;
     return { content: (content + newSection).trim() + "\n", found: false, created: true };
   }
 
@@ -127,8 +128,8 @@ export function updateSection(
 
   const existingSectionContent = content.slice(headingEndIndex, endIndex).trim();
   const newSection = existingSectionContent
-    ? `${match[0]}\n${existingSectionContent}\n\n${newSectionContent.trim()}`
-    : `${match[0]}\n${newSectionContent.trim()}`;
+    ? `${match[0]}\n${existingSectionContent}\n\n${safeContent}`
+    : `${match[0]}\n${safeContent}`;
 
   const newContent =
     content.slice(0, startIndex) +
@@ -151,6 +152,7 @@ export function rewriteSectionContent(
   newSectionContent: string,
 ): { content: string; found: boolean; created: boolean } {
   const content = existingContent.trim();
+  const safeContent = stripLeadingHeading(newSectionContent, sectionName);
 
   const headingPattern = new RegExp(
     `^(#{2,3})\\s*${escapeRegex(sectionName)}\\s*$`,
@@ -160,7 +162,7 @@ export function rewriteSectionContent(
 
   if (!match) {
     // Section doesn't exist — create it at the end of the file
-    const newSection = `\n\n## ${sectionName}\n${newSectionContent.trim()}`;
+    const newSection = `\n\n## ${sectionName}\n${safeContent}`;
     return { content: (content + newSection).trim() + "\n", found: false, created: true };
   }
 
@@ -181,7 +183,7 @@ export function rewriteSectionContent(
     endIndex = headingEndIndex + nextMatch.index;
   }
 
-  const newSection = `${match[0]}\n${newSectionContent.trim()}`;
+  const newSection = `${match[0]}\n${safeContent}`;
 
   const newContent =
     content.slice(0, headingEndIndex) +
@@ -197,6 +199,17 @@ export function rewriteSectionContent(
  */
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Strip a leading ## or ### heading line from content that matches
+ * the given section name. Prevents duplication when the caller
+ * accidentally includes the heading in the content parameter.
+ */
+function stripLeadingHeading(content: string, sectionName: string): string {
+  const trimmed = content.trim();
+  const pattern = new RegExp(`^#{2,3}\\s*${escapeRegex(sectionName)}\\s*\n?`, "");
+  return trimmed.replace(pattern, "").trim();
 }
 
 // =============================================================================

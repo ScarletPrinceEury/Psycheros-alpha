@@ -148,8 +148,10 @@ The single identity tool for all predefined file operations. The tool descriptio
 **Operations:**
 - `append` — add to the end of a file
 - `prepend` — add to the beginning of a file
-- `update_section` — append content under a `## heading` (existing content preserved). **Auto-creates** the section if the heading doesn't exist.
-- `rewrite_section` — replace all content under a `## heading` (existing content removed). **Auto-creates** the section if the heading doesn't exist.
+- `update_section` — append content under a `## heading` (existing content preserved). **Auto-creates** the section if the heading doesn't exist. **This is the default choice for section-level changes.**
+- `rewrite_section` — **DESTRUCTIVE** — replace all content under a `## heading` (existing content removed). **Auto-creates** the section if the heading doesn't exist. Should only be used as a last resort when `update_section` cannot achieve the goal (e.g., removing outdated/incorrect information, consolidating redundant entries). A snapshot is created automatically.
+
+**Content format for section operations:** The `content` parameter must contain ONLY the body text for the section — do NOT include the `## heading` line (the system adds it automatically). A defensive strip also runs server-side to prevent duplication.
 
 **Parameters:** `category` (`self`, `user`, `relationship`), `filename`, `operation`, `content`, `section` (required for section operations).
 
