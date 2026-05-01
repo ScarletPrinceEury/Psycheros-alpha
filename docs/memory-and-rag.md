@@ -62,7 +62,7 @@ Weekly, monthly, and yearly consolidation run independently in entity-core regar
 
 ### Instance Tagging
 
-Memories are tagged with `sourceInstance` to track which embodiment created them. Each bullet point in memory content includes inline `[chat:id]` and `[via:instanceId]` tags so the entity can identify the source of individual memories when multiple embodiments contribute to the same file.
+Memories are tagged with `sourceInstance` to track which embodiment created them. Daily memory bullet points include inline `[chat:id]` and `[via:instanceId]` tags so the entity can identify the source of individual memories when multiple embodiments contribute to the same file. Consolidated memories (weekly, monthly, yearly) preserve `[via:instanceId]` tags but omit `[chat:id]` tags — these are thematic summaries, not conversation logs.
 
 ### MCP Requirements
 

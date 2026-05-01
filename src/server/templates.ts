@@ -2280,12 +2280,6 @@ export function renderMemoryEditor(
     if (metadata.sourceInstance && metadata.sourceInstance !== "unknown") {
       parts.push(`Source: ${escapeHtml(metadata.sourceInstance)}`);
     }
-    if (metadata.createdAt) {
-      parts.push(`Created: ${escapeHtml(new Date(metadata.createdAt).toLocaleString([], { timeZone: getDisplayTZ() }))}`);
-    }
-    if (metadata.updatedAt) {
-      parts.push(`Updated: ${escapeHtml(new Date(metadata.updatedAt).toLocaleString([], { timeZone: getDisplayTZ() }))}`);
-    }
     if (metadata.version && metadata.version > 1) {
       parts.push(`Version: ${metadata.version}`);
     }
