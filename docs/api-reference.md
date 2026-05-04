@@ -112,6 +112,7 @@ Chat request body: `{ "conversationId": string, "message": string, "attachmentId
 | `PUT` | `/api/lorebooks/:id/entries/:entryId` | Update lorebook entry |
 | `DELETE` | `/api/lorebooks/:id/entries/:entryId` | Delete lorebook entry |
 | `DELETE` | `/api/lorebooks/state/:conversationId` | Reset lorebook state |
+| `POST` | `/api/lorebooks/import-sillytavern` | Import SillyTavern lorebook (multipart JSON file) |
 
 ### Knowledge Graph
 

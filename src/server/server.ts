@@ -77,6 +77,7 @@ import {
   handleUpdateLorebookEntry,
   handleDeleteLorebookEntry,
   handleResetLorebookState,
+  handleImportSillyTavernLorebook,
   handleLorebooksFragment,
   handleLorebookDetailFragment,
   handleLorebookEntryEditFragment,
@@ -1186,6 +1187,11 @@ export class Server {
     // POST /api/lorebooks - Create lorebook
     if (method === "POST" && path === "/api/lorebooks") {
       return await handleCreateLorebook(ctx, request);
+    }
+
+    // POST /api/lorebooks/import-sillytavern - Import from SillyTavern
+    if (method === "POST" && path === "/api/lorebooks/import-sillytavern") {
+      return await handleImportSillyTavernLorebook(ctx, request);
     }
 
     // Lorebook entry routes - must match before :id routes

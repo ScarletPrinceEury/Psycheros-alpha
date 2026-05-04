@@ -480,6 +480,66 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.lorebook-card-edit {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+
+.lorebook-card-edit .form-group {
+  margin-bottom: var(--sp-3);
+}
+
+.lorebook-import {
+  background-color: var(--c-bg-raised);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.lorebook-import h3 {
+  margin: 0 0 var(--sp-2) 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.lorebook-import .settings-desc {
+  margin-bottom: var(--sp-3);
+}
+
+.lorebook-import input[type="file"] {
+  display: block;
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: var(--font-size-sm);
+  width: 100%;
+  max-width: 360px;
+  cursor: pointer;
+}
+
+.lorebook-import input[type="file"]::file-selector-button {
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-bg-raised);
+  color: var(--c-fg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  margin-right: var(--sp-3);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.lorebook-import input[type="file"]::file-selector-button:hover {
+  background: var(--c-bg-hover, var(--c-bg-raised));
+  border-color: var(--c-accent, var(--c-border));
+}
+
 /* Entry cards */
 .lorebook-entries-list {
   display: flex;

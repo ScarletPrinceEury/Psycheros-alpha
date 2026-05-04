@@ -2379,7 +2379,7 @@ export function renderLorebooksView(lorebooks: Lorebook[]): string {
           <span class="lorebook-card-status">${book.enabled ? 'Enabled' : 'Disabled'}</span>
         </div>
         ${book.description ? `<p class="lorebook-card-desc">${escapeHtml(book.description)}</p>` : ''}
-        <div class="lorebook-card-actions">
+        <div class="lorebook-card-actions" id="lorebook-actions-${book.id}">
           <button
             class="btn btn--ghost btn--sm"
             hx-get="/fragments/settings/lorebooks/${book.id}"
@@ -2388,12 +2388,37 @@ export function renderLorebooksView(lorebooks: Lorebook[]): string {
           >View Entries</button>
           <button
             class="btn btn--ghost btn--sm"
+            onclick="document.getElementById('lorebook-view-${book.id}').style.display='none';document.getElementById('lorebook-edit-${book.id}').style.display='block'"
+          >Edit</button>
+          <button
+            class="btn btn--ghost btn--sm"
             hx-delete="/api/lorebooks/${book.id}"
             hx-confirm="Delete this context book and all its entries?"
             hx-target="#settings-content"
             hx-swap="innerHTML"
           >Delete</button>
         </div>
+        <div class="lorebook-card-edit" id="lorebook-edit-${book.id}" style="display:none">
+          <form
+            hx-put="/api/lorebooks/${book.id}"
+            hx-target="#settings-content"
+            hx-swap="innerHTML"
+          >
+            <div class="form-group">
+              <label for="lorebook-rename-${book.id}">Name</label>
+              <input type="text" id="lorebook-rename-${book.id}" name="name" value="${escapeHtml(book.name)}" required />
+            </div>
+            <div class="form-group">
+              <label for="lorebook-rename-desc-${book.id}">Description</label>
+              <input type="text" id="lorebook-rename-desc-${book.id}" name="description" value="${escapeHtml(book.description || '')}" placeholder="Optional description" />
+            </div>
+            <div class="form-row" style="gap:0.5rem">
+              <button type="submit" class="btn btn--primary btn--sm">Save</button>
+              <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('lorebook-edit-${book.id}').style.display='none';document.getElementById('lorebook-view-${book.id}').style.display='block'">Cancel</button>
+            </div>
+          </form>
+        </div>
+        <div id="lorebook-view-${book.id}" style="display:none"></div>
       </div>`;
     }
   }
@@ -2417,6 +2442,23 @@ export function renderLorebooksView(lorebooks: Lorebook[]): string {
         <input type="text" id="lorebook-desc" name="description" placeholder="e.g., Background context for conversations" />
       </div>
       <button type="submit" class="btn btn--primary">Create Context Book</button>
+    </form>
+  </div>`;
+
+  // Import from SillyTavern section
+  html += `<div class="lorebook-import">
+    <h3>Import from SillyTavern</h3>
+    <p class="settings-desc">Upload a SillyTavern lorebook JSON file to create a new context book with all its entries.</p>
+    <form
+      hx-post="/api/lorebooks/import-sillytavern"
+      hx-target="#settings-content"
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+    >
+      <div class="form-group">
+        <input type="file" id="st-lorebook-file" name="file" accept=".json" required />
+      </div>
+      <button type="submit" class="btn btn--primary">Import</button>
     </form>
   </div>`;
 

@@ -3184,7 +3184,18 @@ export async function handleUpdateLorebook(
   }
 
   try {
-    const body = await request.json();
+    const contentType = request.headers.get("content-type") || "";
+    let body: Record<string, unknown>;
+
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      const formData = await request.formData();
+      body = { name: formData.get("name") as string };
+      const desc = formData.get("description") as string | null;
+      if (desc !== null) body.description = desc;
+    } else {
+      body = await request.json();
+    }
+
     const lorebook = ctx.lorebookManager.updateLorebook(lorebookId, body);
 
     if (!lorebook) {
@@ -3198,6 +3209,15 @@ export async function handleUpdateLorebook(
           },
         }
       );
+    }
+
+    // If form-encoded (HTMX), return the updated list view
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      const lorebooks = ctx.lorebookManager.listLorebooks();
+      const html = renderLorebooksView(lorebooks);
+      return new Response(html, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
     }
 
     return new Response(JSON.stringify(lorebook), {
@@ -3625,6 +3645,157 @@ export function handleResetLorebookState(
       },
     }
   );
+}
+
+/**
+ * Handle POST /api/lorebooks/import-sillytavern - Import a SillyTavern lorebook
+ */
+export async function handleImportSillyTavernLorebook(
+  ctx: RouteContext,
+  request: Request
+): Promise<Response> {
+  if (!ctx.lorebookManager) {
+    return new Response(
+      JSON.stringify({ error: "Lorebook system not available" }),
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  try {
+    const contentType = request.headers.get("content-type") || "";
+    let jsonData: Record<string, unknown>;
+    let fileName: string;
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return new Response(
+          JSON.stringify({ error: "No file provided" }),
+          {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          }
+        );
+      }
+      fileName = file.name.replace(/\.json$/i, "") || "Imported Lorebook";
+      const text = await file.text();
+      jsonData = JSON.parse(text);
+    } else {
+      const body = await request.json();
+      jsonData = body.lorebook || body;
+      fileName = body.name || "Imported Lorebook";
+    }
+
+    // Validate SillyTavern format
+    const stEntries = jsonData.entries;
+    if (!stEntries || typeof stEntries !== "object" || Array.isArray(stEntries)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid SillyTavern lorebook format: missing entries object" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
+    // Create the lorebook
+    const lorebook = ctx.lorebookManager.createLorebook({
+      name: fileName,
+      description: "Imported from SillyTavern",
+      enabled: true,
+    });
+
+    let entryCount = 0;
+    const errors: string[] = [];
+
+    for (const [_key, entry] of Object.entries(stEntries)) {
+      if (!entry || typeof entry !== "object") continue;
+
+      const e = entry as Record<string, unknown>;
+      try {
+        const entryKey = Array.isArray(e.key) ? e.key : [];
+        const name = (typeof e.comment === "string" && e.comment.trim())
+          ? e.comment.trim()
+          : (entryKey.length > 0 && typeof entryKey[0] === "string")
+            ? entryKey[0].trim()
+            : "Untitled";
+
+        const content = typeof e.content === "string" ? e.content : "";
+
+        if (!content.trim()) {
+          errors.push(`Skipped entry "${name}": empty content`);
+          continue;
+        }
+
+        const triggers = entryKey
+          .filter((k): k is string => typeof k === "string")
+          .map((k) => k.trim())
+          .filter((k) => k.length > 0);
+
+        ctx.lorebookManager.createEntry(lorebook.id, {
+          name,
+          content,
+          triggers,
+          enabled: e.enabled !== false,
+          priority: typeof e.insertion_order === "number" ? e.insertion_order : 10,
+          preventRecursion: !!e.preventRecursion,
+          scanDepth: typeof e.depth === "number" ? e.depth
+            : typeof e.scan_depth === "number" ? e.scan_depth
+            : 5,
+          caseSensitive: !!e.caseSensitive,
+          triggerMode: "substring",
+          sticky: !!e.constant,
+        });
+        entryCount++;
+      } catch (err) {
+        errors.push(`Failed to import entry "${(e.comment as string) || "unknown"}": ${err}`);
+      }
+    }
+
+    // If form-encoded (HTMX), return the updated list view
+    if (contentType.includes("multipart/form-data")) {
+      const lorebooks = ctx.lorebookManager.listLorebooks();
+      const html = renderLorebooksView(lorebooks);
+      return new Response(html, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, bookId: lorebook.id, entryCount, errors }),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("[Routes] handleImportSillyTavernLorebook error:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to import lorebook: " + (error instanceof Error ? error.message : String(error)) }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
 }
 
 // =============================================================================
