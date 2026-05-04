@@ -24,7 +24,8 @@
     "xlsx": "npm:xlsx@^0.18.5",
     "web-push": "npm:web-push@^3.6",
     "jszip": "npm:jszip@^3",
-    "@zendrex/buttplug.js": "npm:@zendrex/buttplug.js@^0.3"
+    "@zendrex/buttplug.js": "npm:@zendrex/buttplug.js@^0.3",
+    "discord.js": "npm:discord.js@^14"
   },
   "lint": {
     "exclude": ["web/lib/", "web/js/"]
