@@ -8,7 +8,7 @@
  */
 
 import { DBClient } from "../db/mod.ts";
-import { createClientFromProfile, createDefaultClient, type LLMClient, type LLMSettings, type LLMProfileSettings, type LLMConnectionProfile, type WebSearchSettings, type DiscordSettings, type HomeSettings, type ImageGenSettings, type EntityCoreLLMSettings, type LovenseSettings, type ButtplugSettings, loadProfileSettings, saveProfileSettings, getActiveProfile, profileToLLMSettings, loadWebSearchSettings, saveWebSearchSettings, loadDiscordSettings, saveDiscordSettings, loadHomeSettings, saveHomeSettings, loadImageGenSettings, saveImageGenSettings, getDefaultImageGenSettings, loadEntityCoreLLMSettings, saveEntityCoreLLMSettings, loadLovenseSettings, saveLovenseSettings, getDefaultLovenseSettings, loadButtplugSettings, saveButtplugSettings, getDefaultButtplugSettings } from "../llm/mod.ts";
+import { createClientFromProfile, createDefaultClient, type LLMClient, type LLMSettings, type LLMProfileSettings, type LLMConnectionProfile, type WebSearchSettings, type DiscordSettings, type HomeSettings, type ImageGenSettings, type EntityCoreLLMSettings, type LovenseSettings, type ButtplugSettings, type GoogleWorkspaceSettings, loadProfileSettings, saveProfileSettings, getActiveProfile, profileToLLMSettings, loadWebSearchSettings, saveWebSearchSettings, loadDiscordSettings, saveDiscordSettings, loadHomeSettings, saveHomeSettings, loadImageGenSettings, saveImageGenSettings, getDefaultImageGenSettings, loadEntityCoreLLMSettings, saveEntityCoreLLMSettings, loadLovenseSettings, saveLovenseSettings, getDefaultLovenseSettings, loadButtplugSettings, saveButtplugSettings, getDefaultButtplugSettings, loadGoogleWorkspaceSettings, saveGoogleWorkspaceSettings, getDefaultGoogleWorkspaceSettings } from "../llm/mod.ts";
 import { createDefaultRegistry, AVAILABLE_TOOLS, loadToolsSettings, saveToolsSettings, getEnabledToolNames, loadCustomTools, ToolRegistry, type ToolsSettings } from "../tools/mod.ts";
 import { getConversationRAG, type RAGConfig, DEFAULT_RAG_CONFIG } from "../rag/mod.ts";
 import { catchUpSummarization, repairOrphanedSummaries } from "../memory/mod.ts";
@@ -285,6 +285,7 @@ export class Server {
   private lovenseSettings: LovenseSettings;
   private buttplugSettings: ButtplugSettings;
   private imageGenSettings: ImageGenSettings;
+  private googleWorkspaceSettings: GoogleWorkspaceSettings;
   private toolSettings: ToolsSettings;
   private entityCoreLLMSettings: EntityCoreLLMSettings;
   private customTools: Record<string, import("../tools/types.ts").Tool>;
@@ -333,6 +334,9 @@ export class Server {
 
     // Initialize Image Gen settings (will be reloaded from settings in init())
     this.imageGenSettings = getDefaultImageGenSettings();
+
+    // Initialize Google Workspace settings (will be reloaded from settings in init())
+    this.googleWorkspaceSettings = getDefaultGoogleWorkspaceSettings();
 
     // Initialize tool settings (will be reloaded from settings in init())
     this.toolSettings = { toolOverrides: {} };
@@ -385,6 +389,7 @@ export class Server {
     this.lovenseSettings = await loadLovenseSettings(this.config.projectRoot);
     this.buttplugSettings = await loadButtplugSettings(this.config.projectRoot);
     this.imageGenSettings = await loadImageGenSettings(this.config.projectRoot);
+    this.googleWorkspaceSettings = await loadGoogleWorkspaceSettings(this.config.projectRoot);
     this.entityCoreLLMSettings = await loadEntityCoreLLMSettings(this.config.projectRoot);
     this.discordGatewaySettings = await loadDiscordGatewaySettings(this.config.projectRoot);
     this.toolSettings = await loadToolsSettings(this.config.projectRoot);
@@ -590,6 +595,22 @@ export class Server {
   }
 
   /**
+   * Get the current Google Workspace settings.
+   */
+  getGoogleWorkspaceSettings(): GoogleWorkspaceSettings {
+    return this.googleWorkspaceSettings;
+  }
+
+  /**
+   * Update Google Workspace settings, persist to disk, and reload tool registry.
+   */
+  async updateGoogleWorkspaceSettings(settings: GoogleWorkspaceSettings): Promise<void> {
+    this.googleWorkspaceSettings = settings;
+    await saveGoogleWorkspaceSettings(this.config.projectRoot, settings);
+    this.reloadToolRegistry();
+  }
+
+  /**
    * Get the current entity-core LLM settings.
    */
   getEntityCoreLLMSettings(): EntityCoreLLMSettings {
@@ -703,6 +724,9 @@ export class Server {
     if (this.imageGenSettings.captioning?.provider) {
       autoEnabled.push("describe_image");
       autoEnabled.push("look_closer");
+    }
+    if (this.googleWorkspaceSettings.enabled) {
+      autoEnabled.push("google_workspace");
     }
 
     // Resolve the final enabled list
@@ -858,6 +882,7 @@ export class Server {
         lovenseSettings: () => this.lovenseSettings,
         buttplugSettings: () => this.buttplugSettings,
         imageGenSettings: () => this.imageGenSettings,
+        googleWorkspaceSettings: () => this.googleWorkspaceSettings,
         contextLength: () => this.getActiveLLMProfile()?.contextLength,
         maxTokens: () => this.getActiveLLMProfile()?.maxTokens,
       }
@@ -882,6 +907,7 @@ export class Server {
         homeSettings: () => this.homeSettings,
         imageGenSettings: () => this.imageGenSettings,
         lovenseSettings: () => this.lovenseSettings,
+        googleWorkspaceSettings: () => this.googleWorkspaceSettings,
         buttplugSettings: () => this.buttplugSettings,
         contextLength: () => this.getActiveLLMProfile()?.contextLength,
         maxTokens: () => this.getActiveLLMProfile()?.maxTokens,
@@ -972,6 +998,8 @@ export class Server {
       updateButtplugSettings: (settings) => this.updateButtplugSettings(settings),
       getImageGenSettings: () => this.imageGenSettings,
       updateImageGenSettings: (settings) => this.updateImageGenSettings(settings),
+      getGoogleWorkspaceSettings: () => this.googleWorkspaceSettings,
+      updateGoogleWorkspaceSettings: (settings) => this.updateGoogleWorkspaceSettings(settings),
       getToolSettings: () => this.toolSettings,
       updateToolSettings: (settings) => this.updateToolSettings(settings),
       getEntityCoreLLMSettings: () => this.entityCoreLLMSettings,

@@ -41,6 +41,8 @@ import { generateImageTool } from "./generate-image.ts";
 import { describeImageTool } from "./describe-image.ts";
 // Look closer tool
 import { lookCloserTool } from "./look-closer.ts";
+// Google Workspace tool
+import { googleWorkspaceTool } from "./google-workspace.ts";
 
 // =============================================================================
 // Available Tools Catalog
@@ -85,6 +87,8 @@ export const AVAILABLE_TOOLS: Record<string, Tool> = {
   generate_image: generateImageTool,
   describe_image: describeImageTool,
   look_closer: lookCloserTool,
+  // Google Workspace tool (Gmail, Calendar, Drive, Docs, etc.)
+  google_workspace: googleWorkspaceTool,
 };
 
 /**

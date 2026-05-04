@@ -12,7 +12,7 @@ import type { SSEEvent, TurnMetrics } from "../types.ts";
 import type { DBClient } from "../db/mod.ts";
 import type { LLMClient, LLMSettings, LLMProfileSettings, LLMConnectionProfile } from "../llm/mod.ts";
 import type { WebSearchSettings } from "../llm/mod.ts";
-import type { DiscordSettings, HomeSettings, LovenseSettings, ButtplugSettings } from "../llm/mod.ts";
+import type { DiscordSettings, HomeSettings, LovenseSettings, ButtplugSettings, GoogleWorkspaceSettings } from "../llm/mod.ts";
 import type { ImageGenSettings, ImageGenConfig, EntityCoreLLMSettings } from "../llm/mod.ts";
 import type { DiscordGatewaySettings } from "../discord/mod.ts";
 import { maskProfileSettings, createDefaultProfile, getDefaultWebSearchSettings, maskWebSearchSettings, getDefaultDiscordSettings, maskDiscordSettings, getDefaultImageGenSettings, maskImageGenSettings } from "../llm/mod.ts";
@@ -155,6 +155,10 @@ export interface RouteContext {
   getImageGenSettings: () => ImageGenSettings;
   /** Update image gen settings and hot-reload tool registry */
   updateImageGenSettings: (settings: ImageGenSettings) => Promise<void>;
+  /** Get current Google Workspace settings */
+  getGoogleWorkspaceSettings: () => GoogleWorkspaceSettings;
+  /** Update Google Workspace settings and hot-reload tool registry */
+  updateGoogleWorkspaceSettings: (settings: GoogleWorkspaceSettings) => Promise<void>;
   /** Get current tools settings */
   getToolSettings: () => ToolsSettings;
   /** Update tools settings and hot-reload tool registry */
@@ -1015,6 +1019,7 @@ export async function handleChat(
             lovenseSettings: ctx.getLovenseSettings(),
             buttplugSettings: ctx.getButtplugSettings(),
             imageGenSettings: ctx.getImageGenSettings(),
+            googleWorkspaceSettings: ctx.getGoogleWorkspaceSettings(),
             contextLength: activeProfile?.contextLength,
             maxTokens: activeProfile?.maxTokens,
           }
@@ -1197,6 +1202,7 @@ export async function handleChatRetry(
             lovenseSettings: ctx.getLovenseSettings(),
             buttplugSettings: ctx.getButtplugSettings(),
             imageGenSettings: ctx.getImageGenSettings(),
+            googleWorkspaceSettings: ctx.getGoogleWorkspaceSettings(),
             contextLength: retryProfile?.contextLength,
             maxTokens: retryProfile?.maxTokens,
           }

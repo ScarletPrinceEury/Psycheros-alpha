@@ -88,6 +88,8 @@ export interface PulseEngineConfig {
   homeSettings?: () => HomeSettings | undefined;
   /** Getter for image generation settings (read fresh each pulse execution) */
   imageGenSettings?: () => ImageGenSettings | undefined;
+  /** Getter for Google Workspace settings */
+  googleWorkspaceSettings?: () => import("../llm/google-settings.ts").GoogleWorkspaceSettings | undefined;
   /** Getter for Lovense settings (read fresh each pulse execution) */
   lovenseSettings?: () => LovenseSettings | undefined;
   /** Getter for Buttplug settings (read fresh each pulse execution) */
@@ -589,6 +591,7 @@ export class PulseEngine {
         homeSettings: this.config.homeSettings?.(),
         imageGenSettings: this.config.imageGenSettings?.(),
         lovenseSettings: this.config.lovenseSettings?.(),
+        googleWorkspaceSettings: this.config.googleWorkspaceSettings?.(),
         buttplugSettings: this.config.buttplugSettings?.(),
         contextLength: this.config.contextLength?.(),
         maxTokens: this.config.maxTokens?.(),

@@ -114,6 +114,8 @@ export interface EntityConfig {
   homeSettings?: HomeSettings;
   /** Optional image generation settings */
   imageGenSettings?: ImageGenSettings;
+  /** Optional Google Workspace settings */
+  googleWorkspaceSettings?: import("../llm/google-settings.ts").GoogleWorkspaceSettings;
   /** Optional Lovense device control settings */
   lovenseSettings?: import("../llm/lovense-settings.ts").LovenseSettings;
   /** Optional Buttplug device control settings */

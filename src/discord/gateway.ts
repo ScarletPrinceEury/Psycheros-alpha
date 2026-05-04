@@ -72,6 +72,8 @@ export interface DiscordGatewayConfig {
   homeSettings?: () => HomeSettings | undefined;
   /** Getter for image gen settings */
   imageGenSettings?: () => ImageGenSettings | undefined;
+  /** Getter for Google Workspace settings */
+  googleWorkspaceSettings?: () => import("../llm/google-settings.ts").GoogleWorkspaceSettings | undefined;
   /** Getter for Lovense settings */
   lovenseSettings?: () => LovenseSettings | undefined;
   /** Getter for Buttplug settings */
@@ -317,6 +319,7 @@ export class DiscordGateway {
       homeSettings: this.config.homeSettings?.(),
       imageGenSettings: this.config.imageGenSettings?.(),
       lovenseSettings: this.config.lovenseSettings?.(),
+      googleWorkspaceSettings: this.config.googleWorkspaceSettings?.(),
       buttplugSettings: this.config.buttplugSettings?.(),
       contextLength: this.config.contextLength?.(),
       maxTokens: this.config.maxTokens?.(),

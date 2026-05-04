@@ -70,3 +70,7 @@ export { loadLovenseSettings, saveLovenseSettings, getDefaultLovenseSettings } f
 // Re-export Buttplug settings
 export type { ButtplugSettings } from "./buttplug-settings.ts";
 export { loadButtplugSettings, saveButtplugSettings, getDefaultButtplugSettings } from "./buttplug-settings.ts";
+
+// Re-export Google Workspace settings
+export type { GoogleWorkspaceSettings } from "./google-settings.ts";
+export { loadGoogleWorkspaceSettings, saveGoogleWorkspaceSettings, getDefaultGoogleWorkspaceSettings, maskGoogleWorkspaceSettings } from "./google-settings.ts";
