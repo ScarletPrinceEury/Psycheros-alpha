@@ -284,7 +284,7 @@ const execute: ToolExecutor = async (
 
   // Build environment with keyring password
   const env: Record<string, string> = {
-    ...Deno.env.toObject(),
+    ...Deno.env,
   };
   if (settings.keyringPassword) {
     env.GOG_KEYRING_PASSWORD = settings.keyringPassword;
