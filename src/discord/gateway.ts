@@ -30,7 +30,7 @@ import type { ButtplugSettings } from "../llm/buttplug-settings.ts";
 import type { EntityConfig } from "../entity/mod.ts";
 import { EntityTurn } from "../entity/mod.ts";
 import { getBroadcaster } from "../server/broadcaster.ts";
-import { splitDiscordMessage, stripMarkdownForDiscord, formatToolCallForDiscord } from "./message-utils.ts";
+import { splitDiscordMessage, stripMarkdownForDiscord } from "./message-utils.ts";
 
 // Discord.js is imported dynamically at runtime via npm specifiers.
 // All discord.js types are used through import() expressions and inline typing.
@@ -152,12 +152,12 @@ export class DiscordGateway {
 
       this.client.on("ready", () => {
         this.running = true;
-        console.log(`[Discord] Gateway connected as ${this.client!.user.tag}`);
+        console.log(`[Discord] Gateway connected as ${this.client!.user?.tag ?? "unknown"}`);
       });
 
       this.client.on("messageCreate", (message) => {
         // Deno.spawn to avoid blocking the event loop
-        this.handleMessage(message as Message).catch((error) => {
+        this.handleMessage(message).catch((error) => {
           console.error(
             "[Discord] Unhandled error in message handler:",
             error instanceof Error ? error.message : String(error),
@@ -211,6 +211,24 @@ export class DiscordGateway {
    */
   isConnected(): boolean {
     return this.running && this.client !== null;
+  }
+
+  // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  /**
+   * Send a message to a Discord channel, handling union types.
+   * PartialGroupDMChannel doesn't have .send(), so we check for it.
+   */
+  private async sendToChannel(
+    channel: import("discord.js").Channel,
+    content: string,
+  ): Promise<import("discord.js").Message | undefined> {
+    if ("send" in channel && typeof channel.send === "function") {
+      return await channel.send(content);
+    }
+    return undefined;
   }
 
   // ===========================================================================
@@ -321,7 +339,7 @@ export class DiscordGateway {
       // Post a "thinking" indicator
       if (canStreamEdits) {
         try {
-          botMessage = await triggerMessage.channel.send("...");
+          botMessage = await this.sendToChannel(triggerMessage.channel, "...") ?? null;
         } catch {
           // May not have permission to send
         }
@@ -336,10 +354,6 @@ export class DiscordGateway {
 
           case "tool_call":
             if (this.config.gatewaySettings.showToolExecution && botMessage) {
-              const toolDisplay = formatToolCallForDiscord(
-                chunk.toolCall.function.name,
-                JSON.parse(chunk.toolCall.function.arguments),
-              );
               try {
                 await botMessage.react("⚙️");
               } catch {
@@ -412,7 +426,7 @@ export class DiscordGateway {
           // Send remaining chunks as follow-up messages
           for (let i = 1; i < chunks.length; i++) {
             try {
-              await triggerMessage.channel.send(chunks[i]);
+              await this.sendToChannel(triggerMessage.channel, chunks[i]);
             } catch {
               break;
             }
@@ -430,7 +444,7 @@ export class DiscordGateway {
           const chunks = splitDiscordMessage(discordContent);
           for (const chunk of chunks) {
             try {
-              await triggerMessage.channel.send(chunk);
+              await this.sendToChannel(triggerMessage.channel, chunk);
             } catch {
               break;
             }
@@ -451,7 +465,8 @@ export class DiscordGateway {
 
       // Send error to Discord
       try {
-        await triggerMessage.channel.send(
+        await this.sendToChannel(
+          triggerMessage.channel,
           `⚠️ Error processing message: ${errorMsg.substring(0, 500)}`,
         );
       } catch {
