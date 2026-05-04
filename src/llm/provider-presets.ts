@@ -18,6 +18,8 @@ export type LLMProvider =
   | "openai"
   | "alibaba"
   | "nanogpt"
+  | "anthropic"
+  | "google"
   | "custom";
 
 // =============================================================================
@@ -128,6 +130,20 @@ export const LLM_PROVIDER_PRESETS: Record<LLMProvider, LLMProviderPreset> = {
     defaultWorkerModel: "GLM-4.5-Air",
     supportsThinking: true,
   },
+  anthropic: {
+    label: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1/messages",
+    defaultModel: "claude-sonnet-4-20250514",
+    defaultWorkerModel: "claude-haiku-4-20250414",
+    supportsThinking: true,
+  },
+  google: {
+    label: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.5-flash",
+    defaultWorkerModel: "gemini-2.0-flash",
+    supportsThinking: true,
+  },
   custom: {
     label: "Custom Endpoint",
     baseUrl: "",
@@ -152,6 +168,8 @@ export function inferProvider(baseUrl: string): LLMProvider {
   if (url.includes("api.openai.com")) return "openai";
   if (url.includes("dashscope.aliyuncs.com")) return "alibaba";
   if (url.includes("nano-gpt.com")) return "nanogpt";
+  if (url.includes("anthropic.com")) return "anthropic";
+  if (url.includes("googleapis.com")) return "google";
 
   return "custom";
 }
@@ -197,6 +215,6 @@ export function createDefaultProfile(): LLMConnectionProfile {
     presencePenalty: 0,
     maxTokens: 4096,
     contextLength: 128000,
-    thinkingEnabled: provider === "openrouter" || provider === "nanogpt" || provider === "custom",
+    thinkingEnabled: provider === "openrouter" || provider === "nanogpt" || provider === "anthropic" || provider === "google" || provider === "custom",
   };
 }

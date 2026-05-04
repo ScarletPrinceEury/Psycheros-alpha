@@ -4098,6 +4098,12 @@ function renderProviderIcon(provider: LLMProvider): string {
     nanogpt: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
     </svg>`,
+    anthropic: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+    </svg>`,
+    google: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2a10 10 0 0 1 7.07 2.93"/><path d="M19.07 4.93A10 10 0 0 1 22 12"/><path d="M22 12a10 10 0 0 1-2.93 7.07"/><path d="M19.07 19.07A10 10 0 0 1 12 22"/><path d="M12 22a10 10 0 0 1-7.07-2.93"/><path d="M4.93 19.07A10 10 0 0 1 2 12"/><path d="M2 12a10 10 0 0 1 2.93-7.07"/><path d="M4.93 4.93A10 10 0 0 1 12 2"/>
+    </svg>`,
     custom: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
     </svg>`,

@@ -14,6 +14,10 @@ export { LLMError } from "./types.ts";
 // Re-export client
 export { createDefaultClient, createWorkerClient, createClientFromProfile, LLMClient } from "./client.ts";
 
+// Re-export provider adapters
+export { openaiAdapter, anthropicAdapter, geminiAdapter } from "./providers/mod.ts";
+export type { ProviderAdapter, ProviderRequest } from "./providers/mod.ts";
+
 // Re-export provider presets and profile types
 export type {
   LLMProvider,
