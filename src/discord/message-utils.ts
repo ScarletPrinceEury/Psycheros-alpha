@@ -92,7 +92,15 @@ export function splitDiscordMessage(content: string): string[] {
 export function stripMarkdownForDiscord(md: string): string {
   let result = md;
 
-  // Remove HTML tags that Discord doesn't support
+  // Remove Psycheros timestamp tags (XML metadata, not user content)
+  // Format: <t>YYYY-MM-DD HH:MM</t>
+  result = result.replace(/<t>[^<]*<\/t>/g, "");
+
+  // Remove IMAGE/USER_IMAGE markers — these don't render in Discord
+  result = result.replace(/\[IMAGE:[^\]]*\]/g, "");
+  result = result.replace(/\[USER_IMAGE:[^\]]*\]/g, "");
+
+  // Remove remaining HTML tags that Discord doesn't support
   result = result.replace(/<[^>]+>/g, "");
 
   // Convert HTML entities
@@ -103,8 +111,8 @@ export function stripMarkdownForDiscord(md: string): string {
   result = result.replace(/&#39;/g, "'");
   result = result.replace(/&nbsp;/g, " ");
 
-  // Keep standard markdown that Discord supports
-  // **bold**, *italic*, ~~strikethrough~~, `code`, ```blocks```, > quotes, - lists
+  // Collapse excessive blank lines (Discord treats >2 newlines same as 2)
+  result = result.replace(/\n{3,}/g, "\n\n");
 
   return result.trim();
 }

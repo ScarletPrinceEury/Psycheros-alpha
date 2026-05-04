@@ -526,20 +526,29 @@ export class DiscordGateway {
 
   /**
    * Get or create a conversation for a Discord channel.
-   * Maps Discord channel IDs to Psycheros conversation IDs.
+   * Uses a deterministic title to find existing conversations across restarts.
    */
   private getOrCreateConversation(channelId: string, isDM: boolean, username: string): string {
-    const existing = this.conversationMap.get(channelId);
-    if (existing) {
-      // Verify the conversation still exists in the DB
-      if (this.config.db.getConversation(existing)) {
-        return existing;
-      }
-      this.conversationMap.delete(channelId);
+    // Check in-memory cache first
+    const cached = this.conversationMap.get(channelId);
+    if (cached && this.config.db.getConversation(cached)) {
+      return cached;
     }
 
+    // Build a deterministic title to find existing conversations after restart
     const prefix = isDM ? "[Discord DM]" : "[Discord]";
-    const title = `${prefix} ${username}`;
+    const title = `${prefix} ${username} (${channelId})`;
+
+    // Search for an existing conversation with this title
+    const conversations = this.config.db.listConversations();
+    const existing = conversations.find((c) => c.title === title);
+    if (existing) {
+      this.conversationMap.set(channelId, existing.id);
+      console.log(`[Discord] Reusing conversation ${existing.id} for channel ${channelId}`);
+      return existing.id;
+    }
+
+    // Create a new conversation
     const conversation = this.config.db.createConversation(title);
     this.conversationMap.set(channelId, conversation.id);
 
