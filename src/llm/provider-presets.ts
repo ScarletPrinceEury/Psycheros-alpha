@@ -18,6 +18,18 @@ export type LLMProvider =
   | "openai"
   | "alibaba"
   | "nanogpt"
+  | "groq"
+  | "cohere"
+  | "mistral"
+  | "deepseek"
+  | "xai"
+  | "fireworks"
+  | "siliconflow"
+  | "perplexity"
+  | "moonshot"
+  | "zai"
+  | "ollama"
+  | "opencompat"
   | "custom";
 
 // =============================================================================
@@ -128,6 +140,90 @@ export const LLM_PROVIDER_PRESETS: Record<LLMProvider, LLMProviderPreset> = {
     defaultWorkerModel: "GLM-4.5-Air",
     supportsThinking: true,
   },
+  groq: {
+    label: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1/chat/completions",
+    defaultModel: "llama-3.3-70b-versatile",
+    defaultWorkerModel: "llama-3.1-8b-instant",
+    supportsThinking: true,
+  },
+  cohere: {
+    label: "Cohere",
+    baseUrl: "https://api.cohere.ai/compatibility/v1/chat/completions",
+    defaultModel: "command-r-plus",
+    defaultWorkerModel: "command-r",
+    supportsThinking: false,
+  },
+  mistral: {
+    label: "Mistral",
+    baseUrl: "https://api.mistral.ai/v1/chat/completions",
+    defaultModel: "mistral-large-latest",
+    defaultWorkerModel: "mistral-small-latest",
+    supportsThinking: false,
+  },
+  deepseek: {
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/chat/completions",
+    defaultModel: "deepseek-chat",
+    defaultWorkerModel: "deepseek-reasoner",
+    supportsThinking: true,
+  },
+  xai: {
+    label: "xAI",
+    baseUrl: "https://api.x.ai/v1/chat/completions",
+    defaultModel: "grok-3",
+    defaultWorkerModel: "grok-3-mini",
+    supportsThinking: false,
+  },
+  fireworks: {
+    label: "Fireworks",
+    baseUrl: "https://api.fireworks.ai/inference/v1/chat/completions",
+    defaultModel: "fire function call v2",
+    defaultWorkerModel: "fire function call v2",
+    supportsThinking: false,
+  },
+  siliconflow: {
+    label: "SiliconFlow",
+    baseUrl: "https://api.siliconflow.cn/v1/chat/completions",
+    defaultModel: "Qwen/Qwen3-8B",
+    defaultWorkerModel: "Qwen/Qwen3-8B",
+    supportsThinking: false,
+  },
+  perplexity: {
+    label: "Perplexity",
+    baseUrl: "https://api.perplexity.ai/chat/completions",
+    defaultModel: "sonar-pro",
+    defaultWorkerModel: "sonar",
+    supportsThinking: false,
+  },
+  moonshot: {
+    label: "Moonshot",
+    baseUrl: "https://api.moonshot.cn/v1/chat/completions",
+    defaultModel: "moonshot-v1-128k",
+    defaultWorkerModel: "moonshot-v1-8k",
+    supportsThinking: false,
+  },
+  zai: {
+    label: "ZAI",
+    baseUrl: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+    defaultModel: "glm-5-turbo",
+    defaultWorkerModel: "glm-4.7",
+    supportsThinking: true,
+  },
+  ollama: {
+    label: "Ollama (Local)",
+    baseUrl: "http://localhost:11434/v1/chat/completions",
+    defaultModel: "llama3",
+    defaultWorkerModel: "llama3",
+    supportsThinking: false,
+  },
+  opencompat: {
+    label: "OpenAI-Compatible",
+    baseUrl: "",
+    defaultModel: "",
+    defaultWorkerModel: "",
+    supportsThinking: false,
+  },
   custom: {
     label: "Custom Endpoint",
     baseUrl: "",
@@ -152,8 +248,19 @@ export function inferProvider(baseUrl: string): LLMProvider {
   if (url.includes("api.openai.com")) return "openai";
   if (url.includes("dashscope.aliyuncs.com")) return "alibaba";
   if (url.includes("nano-gpt.com")) return "nanogpt";
+  if (url.includes("groq.com")) return "groq";
+  if (url.includes("cohere.ai")) return "cohere";
+  if (url.includes("mistral.ai")) return "mistral";
+  if (url.includes("deepseek.com")) return "deepseek";
+  if (url.includes("x.ai")) return "xai";
+  if (url.includes("fireworks.ai")) return "fireworks";
+  if (url.includes("siliconflow.cn")) return "siliconflow";
+  if (url.includes("perplexity.ai")) return "perplexity";
+  if (url.includes("moonshot.cn")) return "moonshot";
+  if (url.includes("z.ai")) return "zai";
+  if (url.includes("localhost:11434")) return "ollama";
 
-  return "custom";
+  return "opencompat";
 }
 
 /**
@@ -197,6 +304,6 @@ export function createDefaultProfile(): LLMConnectionProfile {
     presencePenalty: 0,
     maxTokens: 4096,
     contextLength: 128000,
-    thinkingEnabled: provider === "openrouter" || provider === "nanogpt" || provider === "custom",
+    thinkingEnabled: LLM_PROVIDER_PRESETS[provider].supportsThinking,
   };
 }
