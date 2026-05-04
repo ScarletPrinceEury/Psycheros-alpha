@@ -407,3 +407,77 @@ export async function handleAdminEntityDataImport(ctx: RouteContext, body: Uint8
     }), { headers: JSON_HEADERS });
   }
 }
+
+/**
+ * POST /api/admin/data-migration/memories — Import memory .md files via direct copy.
+ * Accepts FormData with 'files' field (multiple .md) and 'granularity' field.
+ * Copies files directly into entity-core's memory directory.
+ */
+export async function handleAdminDataMigrationMemories(ctx: RouteContext, request: Request): Promise<Response> {
+  const result = { success: true, imported: 0, errors: [] as Array<{ filename: string; error: string }>, error: "" };
+
+  try {
+    const entityCoreRoot = Deno.env.get("PSYCHEROS_ENTITY_CORE_PATH") ||
+      join(ctx.projectRoot, "..", "entity-core");
+    const entityCoreDataDir = Deno.env.get("PSYCHEROS_ENTITY_CORE_DATA_DIR") ||
+      `${entityCoreRoot}/data`;
+
+    const formData = await request.formData();
+    const files = formData.getAll("files") as File[];
+    const granularity = (formData.get("granularity") as string) || "daily";
+
+    if (!["daily", "significant"].includes(granularity)) {
+      return new Response(JSON.stringify({
+        ...result, success: false,
+        error: `Invalid granularity: ${granularity}. Must be "daily" or "significant".`,
+      }), { headers: JSON_HEADERS });
+    }
+
+    if (files.length === 0) {
+      return new Response(JSON.stringify({
+        ...result, success: false,
+        error: "No files provided",
+      }), { headers: JSON_HEADERS });
+    }
+
+    const targetDir = join(entityCoreDataDir, "memories", granularity);
+
+    // Ensure target directory exists
+    await Deno.mkdir(targetDir, { recursive: true });
+
+    for (const file of files) {
+      const filename = file.name;
+
+      if (!filename.endsWith(".md")) {
+        result.errors.push({ filename, error: "Not a .md file" });
+        continue;
+      }
+
+      // Check for filename collision
+      const targetPath = join(targetDir, filename);
+      try {
+        await Deno.stat(targetPath);
+        result.errors.push({ filename, error: "File already exists — skipping to prevent overwrite" });
+        continue;
+      } catch {
+        // File doesn't exist, proceed
+      }
+
+      try {
+        const content = new Uint8Array(await file.arrayBuffer());
+        await Deno.writeFile(targetPath, content);
+        result.imported++;
+      } catch (err) {
+        result.errors.push({ filename, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    result.success = result.errors.length === 0;
+    return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      ...result, success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }), { headers: JSON_HEADERS });
+  }
+}

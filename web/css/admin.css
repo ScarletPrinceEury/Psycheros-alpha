@@ -88,6 +88,10 @@
 
 .admin-section {
   margin-bottom: var(--sp-6);
+  background: var(--c-bg);
+  padding: var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
 }
 
 .admin-section-title {
@@ -688,4 +692,55 @@
 .admin-action-output-pre::-webkit-scrollbar-thumb {
   background: var(--c-border-strong);
   border-radius: 3px;
+}
+
+/* ── Data Migration — Placeholder / Disabled State ───────── */
+
+/* Style the native file input button to match the admin theme */
+.admin-input[type="file"] {
+  width: auto;
+  padding: var(--sp-1) var(--sp-2);
+  color-scheme: dark;
+}
+
+.admin-input[type="file"]::file-selector-button {
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--c-bg-sunken);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  color: var(--c-accent);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: var(--sp-3);
+  transition: background var(--transition), box-shadow var(--transition);
+}
+
+.admin-input[type="file"]::file-selector-button:hover {
+  background: var(--c-accent-subtle);
+  box-shadow: var(--glow-accent);
+}
+
+.admin-input[type="file"]::file-selector-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-migration-placeholder {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.admin-migration-placeholder .admin-section-title {
+  color: var(--c-fg-subtle);
+}
+
+.admin-migration-disabled-btn {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-migration-output {
+  margin-top: var(--sp-3);
 }

@@ -639,11 +639,11 @@ export function renderAdminEntityData(): string {
   </div>
 
   <div class="admin-section">
-    <h3 class="admin-section-title">Import Entity Data</h3>
+    <h3 class="admin-section-title">Entity Overwrite</h3>
     <p class="admin-action-desc">
-      Performs a <strong>full overwrite</strong> of all entity data from a zip file.
-      A snapshot is taken before overwriting entity-core data. After import,
-      stale RAG indexes are cleared and will be rebuilt on next access.
+      Performs a <strong>full overwrite</strong> of all entity data from a Psycheros
+      entity zip file. A snapshot is taken before overwriting entity-core data.
+      After import, stale RAG indexes are cleared and will be rebuilt on next access.
       The import requires MCP to be connected for entity-core data.
     </p>
     <div class="admin-action-form">
@@ -659,6 +659,107 @@ export function renderAdminEntityData(): string {
         </svg>
         Full Overwrite Import
       </button>
+    </div>
+  </div>
+
+  <div class="admin-section">
+    <h3 class="admin-section-title">Data Migration</h3>
+    <p class="admin-action-desc">
+      Import entity data from external sources (ChatGPT, SillyTavern, etc.)
+      via <strong>entity-loom</strong> export packages. Each data type is imported
+      separately so failures are isolated. Imports are <strong>additive only</strong>
+      — existing data is never overwritten. Requires entity-core data directory
+      to be configured.
+    </p>
+
+    <div class="admin-section">
+      <h3 class="admin-section-title">Significant Memories</h3>
+      <p class="admin-action-desc">
+        Import significant memory .md files from an entity-loom export. Each file
+        is copied directly into entity-core's memory directory. Files are immediately
+        available for RAG retrieval.
+      </p>
+      <div class="admin-action-form">
+        <div class="admin-action-fields">
+          <label class="admin-action-label" for="admin-migration-sig-files">Select .md files</label>
+          <input id="admin-migration-sig-files" type="file" accept=".md" multiple class="admin-input" />
+        </div>
+        <button id="admin-migration-sig-btn" class="admin-action-btn" onclick="window.adminImportMemories('significant')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Import Significant Memories
+        </button>
+      </div>
+      <div class="admin-migration-output" id="admin-migration-sig-output" style="display:none"></div>
+    </div>
+
+    <div class="admin-section">
+      <h3 class="admin-section-title">Daily Memories</h3>
+      <p class="admin-action-desc">
+        Import daily memory .md files from an entity-loom export. Each file
+        is copied directly into entity-core's memory directory. Files are immediately
+        available for RAG retrieval.
+      </p>
+      <div class="admin-action-form">
+        <div class="admin-action-fields">
+          <label class="admin-action-label" for="admin-migration-daily-files">Select .md files</label>
+          <input id="admin-migration-daily-files" type="file" accept=".md" multiple class="admin-input" />
+        </div>
+        <button id="admin-migration-daily-btn" class="admin-action-btn" onclick="window.adminImportMemories('daily')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Import Daily Memories
+        </button>
+      </div>
+      <div class="admin-migration-output" id="admin-migration-daily-output" style="display:none"></div>
+    </div>
+
+    <div class="admin-section admin-migration-placeholder">
+      <h3 class="admin-section-title">Chat / Conversations</h3>
+      <p class="admin-action-desc">
+        Merge conversation history from chats.db exports. Will merge conversations
+        by matching timestamps and participants, avoiding duplicates. <em>Coming soon.</em>
+      </p>
+      <div class="admin-action-form">
+        <div class="admin-action-fields">
+          <label class="admin-action-label" for="admin-migration-chat-files">Select .db file</label>
+          <input id="admin-migration-chat-files" type="file" accept=".db" class="admin-input" disabled />
+        </div>
+        <button class="admin-action-btn admin-migration-disabled-btn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Coming Soon
+        </button>
+      </div>
+    </div>
+
+    <div class="admin-section admin-migration-placeholder">
+      <h3 class="admin-section-title">Knowledge Graph</h3>
+      <p class="admin-action-desc">
+        Merge knowledge graph data from graph.db exports. Will perform semantic
+        deduplication to prevent duplicate nodes and edges. <em>Coming soon.</em>
+      </p>
+      <div class="admin-action-form">
+        <div class="admin-action-fields">
+          <label class="admin-action-label" for="admin-migration-graph-files">Select .db file</label>
+          <input id="admin-migration-graph-files" type="file" accept=".db" class="admin-input" disabled />
+        </div>
+        <button class="admin-action-btn admin-migration-disabled-btn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Coming Soon
+        </button>
+      </div>
     </div>
   </div>
 

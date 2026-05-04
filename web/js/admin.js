@@ -418,6 +418,100 @@
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Full Overwrite Import';
   };
 
+  /**
+   * Import memory files via the data migration API.
+   * @param {"daily"|"significant"} granularity
+   */
+  window.adminImportMemories = async function (granularity) {
+    var fileInputId = granularity === "significant"
+      ? "admin-migration-sig-files"
+      : "admin-migration-daily-files";
+    var btnId = granularity === "significant"
+      ? "admin-migration-sig-btn"
+      : "admin-migration-daily-btn";
+    var outputId = granularity === "significant"
+      ? "admin-migration-sig-output"
+      : "admin-migration-daily-output";
+
+    var fileInput = document.getElementById(fileInputId);
+    var btn = document.getElementById(btnId);
+    var outputEl = document.getElementById(outputId);
+
+    if (!fileInput || !btn || !outputEl) return;
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+      alert("Please select at least one .md file.");
+      return;
+    }
+
+    var files = Array.from(fileInput.files);
+    var invalidFiles = files.filter(function (f) { return !f.name.endsWith(".md"); });
+    if (invalidFiles.length > 0) {
+      alert("Only .md files are supported. Found: " + invalidFiles.map(function (f) { return f.name; }).join(", "));
+      return;
+    }
+
+    var label = granularity === "significant" ? "Significant Memories" : "Daily Memories";
+    btn.disabled = true;
+    btn.innerHTML = '<span class="admin-action-spinner"></span> Importing...';
+
+    outputEl.style.display = "";
+    outputEl.textContent = "Importing " + files.length + " " + label.toLowerCase() + "...\n";
+
+    try {
+      var formData = new FormData();
+      files.forEach(function (file) {
+        formData.append("files", file);
+      });
+      formData.append("granularity", granularity);
+
+      var res = await fetch("/api/admin/data-migration/memories", {
+        method: "POST",
+        body: formData,
+      });
+
+      var data = await res.json();
+
+      if (data.error && !data.imported && (!data.errors || data.errors.length === 0)) {
+        // Fatal error (e.g., entity-core data dir not found)
+        outputEl.innerHTML = '<div class="admin-action-output-header admin-action-error">'
+          + escapeHtmlForOutput(data.error) + '</div>';
+      } else {
+        var lines = [];
+        lines.push(label + " import complete.");
+        lines.push("Successfully imported: " + (data.imported || 0));
+
+        if (data.errors && data.errors.length > 0) {
+          lines.push("");
+          lines.push("Errors (" + data.errors.length + "):");
+          data.errors.forEach(function (e) {
+            lines.push("  " + e.filename + ": " + e.error);
+          });
+        }
+
+        outputEl.innerHTML = '<div class="admin-action-output-header">'
+          + escapeHtmlForOutput(lines[0]) + '</div>'
+          + '<pre class="admin-action-output-pre">' + escapeHtmlForOutput(lines.join("\n")) + '</pre>';
+      }
+    } catch (err) {
+      outputEl.innerHTML = '<div class="admin-action-output-header admin-action-error">'
+        + 'Request failed: ' + escapeHtmlForOutput(err.message) + '</div>';
+    }
+
+    // Restore button
+    var btnText = granularity === "significant" ? "Import Significant Memories" : "Import Daily Memories";
+    var btnSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      + '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+      + '<polyline points="17 8 12 3 7 8"/>'
+      + '<line x1="12" y1="3" x2="12" y2="15"/>'
+      + '</svg>';
+    btn.disabled = false;
+    btn.innerHTML = btnSvg + " " + btnText;
+
+    // Clear file input after import
+    fileInput.value = "";
+  };
+
   // Format timestamps already on the page
   formatLocalTimes();
 

@@ -207,6 +207,7 @@ import {
   handleAdminEntityDataFragment,
   handleAdminEntityDataExport,
   handleAdminEntityDataImport,
+  handleAdminDataMigrationMemories,
 } from "./admin-routes.ts";
 import { setServerStartTime } from "./diagnostics.ts";
 
@@ -940,7 +941,7 @@ export class Server {
       const contentLength = request.headers.get("content-length");
       if (contentLength) {
         const size = parseInt(contentLength);
-        const isUpload = path === "/api/backgrounds" || path === "/api/chat-attachments" || path === "/api/anchor-images";
+        const isUpload = path === "/api/backgrounds" || path === "/api/chat-attachments" || path === "/api/anchor-images" || path === "/api/admin/data-migration/memories";
         const limit = isUpload ? MAX_UPLOAD_BODY_SIZE : MAX_REQUEST_BODY_SIZE;
         if (size > limit) {
           return new Response(
@@ -1619,6 +1620,11 @@ export class Server {
     if (method === "POST" && path === "/api/admin/entity-data/import") {
       const body = await request.arrayBuffer();
       return await handleAdminEntityDataImport(ctx, new Uint8Array(body));
+    }
+
+    // POST /api/admin/data-migration/memories - Import memory .md files
+    if (method === "POST" && path === "/api/admin/data-migration/memories") {
+      return await handleAdminDataMigrationMemories(ctx, request);
     }
 
     // ========================================
