@@ -22,6 +22,14 @@ import { LorebookManager } from "../lorebook/mod.ts";
 import { VaultManager } from "../vault/mod.ts";
 import { PulseEngine } from "../pulse/mod.ts";
 import { setPulseEngine } from "../tools/pulse-tools.ts";
+import {
+  DiscordGateway,
+  type DiscordGatewayConfig,
+  loadDiscordGatewaySettings,
+  saveDiscordGatewaySettings,
+  getDefaultDiscordGatewaySettings,
+  type DiscordGatewaySettings,
+} from "../discord/mod.ts";
 import { join } from "@std/path";
 import { MAX_REQUEST_BODY_SIZE, MAX_UPLOAD_BODY_SIZE } from "../constants.ts";
 import {
@@ -131,6 +139,8 @@ import {
   handleSaveWebSearchSettings,
   handleGetDiscordSettings,
   handleSaveDiscordSettings,
+  handleGetDiscordGatewaySettings,
+  handleSaveDiscordGatewaySettings,
   handleConnectionsSettingsFragment,
   handleConnectionsDiscordFragment,
   handleConnectionsHomeFragment,
@@ -279,6 +289,8 @@ export class Server {
   private entityCoreLLMSettings: EntityCoreLLMSettings;
   private customTools: Record<string, import("../tools/types.ts").Tool>;
   private pulseEngine: PulseEngine | null = null;
+  private discordGateway: DiscordGateway | null = null;
+  private discordGatewaySettings: DiscordGatewaySettings;
 
   /**
    * Create a new Server instance.
@@ -328,6 +340,9 @@ export class Server {
     // Initialize Entity-Core LLM settings (will be reloaded from settings in init())
     this.entityCoreLLMSettings = {};
 
+    // Initialize Discord Gateway settings (will be reloaded from settings in init())
+    this.discordGatewaySettings = getDefaultDiscordGatewaySettings();
+
     // Initialize custom tools (will be loaded in init())
     this.customTools = {};
 
@@ -371,6 +386,7 @@ export class Server {
     this.buttplugSettings = await loadButtplugSettings(this.config.projectRoot);
     this.imageGenSettings = await loadImageGenSettings(this.config.projectRoot);
     this.entityCoreLLMSettings = await loadEntityCoreLLMSettings(this.config.projectRoot);
+    this.discordGatewaySettings = await loadDiscordGatewaySettings(this.config.projectRoot);
     this.toolSettings = await loadToolsSettings(this.config.projectRoot);
     this.customTools = await loadCustomTools(this.config.projectRoot);
     this.reloadLLMClient();
@@ -610,6 +626,21 @@ export class Server {
   }
 
   /**
+   * Get the current Discord Gateway settings.
+   */
+  getDiscordGatewaySettings(): DiscordGatewaySettings {
+    return this.discordGatewaySettings;
+  }
+
+  /**
+   * Update Discord Gateway settings, persist to disk.
+   */
+  async updateDiscordGatewaySettings(settings: DiscordGatewaySettings): Promise<void> {
+    this.discordGatewaySettings = settings;
+    await saveDiscordGatewaySettings(this.config.projectRoot, settings);
+  }
+
+  /**
    * Get the current tools settings.
    */
   getToolSettings(): ToolsSettings {
@@ -833,6 +864,35 @@ export class Server {
     );
     this.pulseEngine.start();
 
+    // Initialize Discord Gateway if enabled
+    if (this.discordGatewaySettings.enableGateway && this.discordSettings.enabled && this.discordSettings.botToken) {
+      const gatewayConfig: DiscordGatewayConfig = {
+        projectRoot: this.config.projectRoot,
+        botToken: this.discordSettings.botToken,
+        gatewaySettings: this.discordGatewaySettings,
+        discordSettings: () => this.discordSettings,
+        db: this.db,
+        getLlm: () => this.llm,
+        tools: () => this.tools,
+        chatRAG: this.chatRAG ?? undefined,
+        mcpClient: this.mcpClient ?? undefined,
+        lorebookManager: this.lorebookManager,
+        vaultManager: this.vaultManager,
+        webSearchSettings: () => this.webSearchSettings,
+        homeSettings: () => this.homeSettings,
+        imageGenSettings: () => this.imageGenSettings,
+        lovenseSettings: () => this.lovenseSettings,
+        buttplugSettings: () => this.buttplugSettings,
+        contextLength: () => this.getActiveLLMProfile()?.contextLength,
+        maxTokens: () => this.getActiveLLMProfile()?.maxTokens,
+      };
+
+      this.discordGateway = new DiscordGateway(gatewayConfig);
+      this.discordGateway.start().catch((error) => {
+        console.error("[Discord] Failed to start gateway:", error instanceof Error ? error.message : String(error));
+      });
+    }
+
     // Wire pulse engine into the entity-facing pulse tool
     setPulseEngine(this.pulseEngine);
 
@@ -860,6 +920,11 @@ export class Server {
     // Stop pulse engine
     if (this.pulseEngine) {
       this.pulseEngine.stop();
+    }
+
+    // Stop Discord Gateway
+    if (this.discordGateway) {
+      this.discordGateway.stop();
     }
 
     // Clear keepalive timer
@@ -911,6 +976,8 @@ export class Server {
       updateToolSettings: (settings) => this.updateToolSettings(settings),
       getEntityCoreLLMSettings: () => this.entityCoreLLMSettings,
       updateEntityCoreLLMSettings: (settings) => this.updateEntityCoreLLMSettings(settings),
+      getDiscordGatewaySettings: () => this.discordGatewaySettings,
+      updateDiscordGatewaySettings: (settings) => this.updateDiscordGatewaySettings(settings),
       customTools: this.customTools,
     };
   }
@@ -1425,6 +1492,16 @@ export class Server {
     if (method === "POST" && path === "/api/discord-settings/reset") {
       const { handleResetDiscordSettings } = await import("./routes.ts");
       return await handleResetDiscordSettings(ctx);
+    }
+
+    // GET /api/discord/gateway-settings - Get current Discord Gateway settings
+    if (method === "GET" && path === "/api/discord/gateway-settings") {
+      return handleGetDiscordGatewaySettings(ctx);
+    }
+
+    // POST /api/discord/gateway-settings - Save Discord Gateway settings
+    if (method === "POST" && path === "/api/discord/gateway-settings") {
+      return await handleSaveDiscordGatewaySettings(ctx, request);
     }
 
     // ========================================

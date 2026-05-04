@@ -14,6 +14,7 @@ import type { LLMClient, LLMSettings, LLMProfileSettings, LLMConnectionProfile }
 import type { WebSearchSettings } from "../llm/mod.ts";
 import type { DiscordSettings, HomeSettings, LovenseSettings, ButtplugSettings } from "../llm/mod.ts";
 import type { ImageGenSettings, ImageGenConfig, EntityCoreLLMSettings } from "../llm/mod.ts";
+import type { DiscordGatewaySettings } from "../discord/mod.ts";
 import { maskProfileSettings, createDefaultProfile, getDefaultWebSearchSettings, maskWebSearchSettings, getDefaultDiscordSettings, maskDiscordSettings, getDefaultImageGenSettings, maskImageGenSettings } from "../llm/mod.ts";
 import { getActiveProfile } from "../llm/settings.ts";
 import { join } from "@std/path";
@@ -162,6 +163,10 @@ export interface RouteContext {
   getEntityCoreLLMSettings: () => EntityCoreLLMSettings;
   /** Update entity-core LLM settings and restart MCP client */
   updateEntityCoreLLMSettings: (settings: EntityCoreLLMSettings) => Promise<void>;
+  /** Get current Discord Gateway settings */
+  getDiscordGatewaySettings: () => DiscordGatewaySettings;
+  /** Update Discord Gateway settings and persist */
+  updateDiscordGatewaySettings: (settings: DiscordGatewaySettings) => Promise<void>;
   /** Custom tools loaded from custom-tools/ directory */
   customTools: Record<string, import("../tools/types.ts").Tool>;
 }
@@ -4976,6 +4981,80 @@ export async function handleResetDiscordSettings(
     console.error("[Routes] handleResetDiscordSettings error:", error);
     return new Response(
       JSON.stringify({ error: "Failed to reset settings" }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      },
+    );
+  }
+}
+
+// =============================================================================
+// Discord Gateway Settings API Routes
+// =============================================================================
+
+/**
+ * Handle GET /api/discord/gateway-settings - Get current Discord Gateway settings.
+ */
+export function handleGetDiscordGatewaySettings(ctx: RouteContext): Response {
+  return new Response(
+    JSON.stringify(ctx.getDiscordGatewaySettings()),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    },
+  );
+}
+
+/**
+ * Handle POST /api/discord/gateway-settings - Save Discord Gateway settings.
+ */
+export async function handleSaveDiscordGatewaySettings(
+  ctx: RouteContext,
+  request: Request,
+): Promise<Response> {
+  try {
+    const body = await request.json() as Partial<DiscordGatewaySettings>;
+    const current = ctx.getDiscordGatewaySettings();
+
+    const updated: DiscordGatewaySettings = {
+      listenChannelIds: Array.isArray(body.listenChannelIds)
+        ? body.listenChannelIds
+        : current.listenChannelIds,
+      allowedUserIds: Array.isArray(body.allowedUserIds)
+        ? body.allowedUserIds
+        : current.allowedUserIds,
+      enableGateway: typeof body.enableGateway === "boolean"
+        ? body.enableGateway
+        : current.enableGateway,
+      showToolExecution: typeof body.showToolExecution === "boolean"
+        ? body.showToolExecution
+        : current.showToolExecution,
+      streamingEdits: typeof body.streamingEdits === "boolean"
+        ? body.streamingEdits
+        : current.streamingEdits,
+      dmResponses: typeof body.dmResponses === "boolean"
+        ? body.dmResponses
+        : current.dmResponses,
+    };
+
+    await ctx.updateDiscordGatewaySettings(updated);
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (error) {
+    console.error("[Routes] handleSaveDiscordGatewaySettings error:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to save gateway settings" }),
       {
         status: 500,
         headers: {
