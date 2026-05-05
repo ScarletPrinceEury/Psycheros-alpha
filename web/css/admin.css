@@ -744,3 +744,31 @@
 .admin-migration-output {
   margin-top: var(--sp-3);
 }
+
+/* ── Import Progress Bar ───────────────────────────────── */
+
+.import-progress {
+  margin-top: var(--sp-3);
+}
+
+.import-progress-bar {
+  height: 6px;
+  background: var(--c-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.import-progress-fill {
+  height: 100%;
+  background: var(--c-accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.import-progress-text {
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--c-fg-muted);
+  margin-top: var(--sp-1);
+}
