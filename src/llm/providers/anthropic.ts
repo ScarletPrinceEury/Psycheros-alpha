@@ -34,38 +34,111 @@ export interface AnthropicAccumulator {
 /**
  * Merge consecutive same-role messages to satisfy Anthropic's alternation requirement.
  * System messages are extracted and returned separately.
+ * Tool calls in assistant messages are parsed into Anthropic tool_use blocks.
+ * Tool results are interleaved immediately after their parent assistant messages.
  */
 function extractAndMergeMessages(messages: ChatMessage[]): {
   system: string;
   merged: Array<{ role: string; content: unknown[] }>;
 } {
   const systemParts: string[] = [];
-  const roleOrder: string[] = [];
+  const nonSystemMessages: ChatMessage[] = [];
 
   for (const msg of messages) {
     if (msg.role === "system") {
       systemParts.push(msg.content);
     } else {
-      const mappedRole = msg.role === "assistant" ? "assistant" : "user";
-      if (roleOrder.length === 0 || roleOrder[roleOrder.length - 1] !== mappedRole) {
-        roleOrder.push(mappedRole);
-      }
+      nonSystemMessages.push(msg);
     }
   }
 
-  // Build content blocks grouped by consecutive role
-  const nonSystemMessages = messages.filter((m) => m.role !== "system");
   const merged: Array<{ role: string; content: unknown[] }> = [];
+  let i = 0;
 
-  for (const msg of nonSystemMessages) {
+  while (i < nonSystemMessages.length) {
+    const msg = nonSystemMessages[i];
     const role = msg.role === "assistant" ? "assistant" : "user";
 
-    if (merged.length > 0 && merged[merged.length - 1].role === role) {
-      // Merge into existing block
-      merged[merged.length - 1].content.push({ type: "text", text: msg.content });
-    } else {
-      merged.push({ role, content: [{ type: "text", text: msg.content }] });
+    if (msg.role === "tool") {
+      // Tool result — group all consecutive tool results into one user message
+      const toolBlocks: unknown[] = [];
+      while (i < nonSystemMessages.length && nonSystemMessages[i].role === "tool") {
+        const toolMsg = nonSystemMessages[i];
+        let content: unknown;
+        try {
+          content = JSON.parse(toolMsg.content);
+        } catch {
+          content = toolMsg.content;
+        }
+        toolBlocks.push({
+          type: "tool_result",
+          tool_use_id: toolMsg.tool_call_id || "",
+          content: typeof content === "string" ? content : JSON.stringify(content),
+        });
+        i++;
+      }
+      if (merged.length > 0 && merged[merged.length - 1].role === "user") {
+        merged[merged.length - 1].content.push(...toolBlocks);
+      } else {
+        merged.push({ role: "user", content: toolBlocks });
+      }
+      continue;
     }
+
+    // Parse assistant messages for tool calls
+    if (role === "assistant" && msg.content) {
+      const contentBlocks: unknown[] = [];
+      let textContent = msg.content;
+      let hasToolCalls = false;
+
+      try {
+        const parsed = JSON.parse(msg.content);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item.type === "tool_use" || item.tool_call_id) {
+              hasToolCalls = true;
+              contentBlocks.push({
+                type: "tool_use",
+                id: item.id || item.tool_call_id || "",
+                name: item.name || item.function?.name || "",
+                input: item.input || item.function?.arguments
+                  ? (typeof item.function?.arguments === "string"
+                    ? JSON.parse(item.function.arguments)
+                    : item.function?.arguments)
+                  : {},
+              });
+            } else if (item.type === "text" || typeof item === "string") {
+              contentBlocks.push({
+                type: "text",
+                text: typeof item === "string" ? item : (item.text || JSON.stringify(item)),
+              });
+            }
+          }
+        }
+      } catch {
+        // Not JSON — treat as plain text
+      }
+
+      if (!hasToolCalls) {
+        contentBlocks.push({ type: "text", text: textContent });
+      }
+
+      if (merged.length > 0 && merged[merged.length - 1].role === "assistant") {
+        merged[merged.length - 1].content.push(...contentBlocks);
+      } else {
+        merged.push({ role: "assistant", content: contentBlocks });
+      }
+    } else {
+      // User message
+      const block = { role: "user", content: [{ type: "text", text: msg.content }] };
+      if (merged.length > 0 && merged[merged.length - 1].role === "user") {
+        merged[merged.length - 1].content.push({ type: "text", text: msg.content });
+      } else {
+        merged.push(block);
+      }
+    }
+
+    i++;
   }
 
   // Ensure conversation starts with "user" (Anthropic requirement)
@@ -91,34 +164,6 @@ function transformTools(tools: ToolDefinition[]): unknown[] {
 }
 
 /**
- * Transform Psycheros tool result messages into Anthropic tool_result format.
- */
-function transformToolResults(messages: ChatMessage[]): Array<{ role: string; content: unknown[] }> {
-  const results: Array<{ role: string; content: unknown[] }> = [];
-  const pending = messages.filter((m) => m.role === "tool");
-
-  for (const msg of pending) {
-    let content: unknown;
-    try {
-      content = JSON.parse(msg.content);
-    } catch {
-      content = msg.content;
-    }
-
-    results.push({
-      role: "user",
-      content: [{
-        type: "tool_result",
-        tool_use_id: msg.tool_call_id || "",
-        content: typeof content === "string" ? content : JSON.stringify(content),
-      }],
-    });
-  }
-
-  return results;
-}
-
-/**
  * Adapter for the Anthropic Messages API.
  */
 export const anthropicAdapter: ProviderAdapter = {
@@ -129,12 +174,8 @@ export const anthropicAdapter: ProviderAdapter = {
     options?: { temperature?: number; maxTokens?: number; thinkingEnabled?: boolean },
   ): ProviderRequest {
     const { system, merged } = extractAndMergeMessages(messages);
-    const toolResults = transformToolResults(messages);
-
-    // Interleave tool results back into the merged message sequence at the right positions.
-    // Tool results follow assistant messages that contained tool_use blocks.
-    // For simplicity, we append tool results as user-role messages.
-    const allMessages = [...merged, ...toolResults];
+    // Tool results are interleaved inside extractAndMergeMessages
+    const allMessages = merged;
 
     const body: Record<string, unknown> = {
       model: profile.model,
