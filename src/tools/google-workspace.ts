@@ -85,13 +85,13 @@ interface GoogleWorkspaceArgs {
 
 /**
  * Build the gog command arguments for a given service/action pair.
- * Returns null for unknown combinations (falls through to passthrough).
+ * Returns null for unknown service/action combinations.
  */
 function buildCommand(
   gogPath: string,
   args: GoogleWorkspaceArgs,
   account?: string,
-): string[] {
+): string[] | null {
   const { service, action, query, args: positional, flags, body } = args;
   const extraArgs = positional ?? [];
   const f = flags ?? {};
@@ -182,8 +182,9 @@ function buildCommand(
       return [gogPath, "people", "search", query || ""];
 
     default:
-      // Passthrough: let gog handle unknown combinations
-      return [gogPath, service, action, ...extraArgs];
+      // Unknown service/action combination — don't pass through to gog
+      // This prevents LLM hallucinations from executing arbitrary gog subcommands
+      return null;
   }
 }
 
@@ -278,6 +279,13 @@ const execute: ToolExecutor = async (
   // Build command arguments
   const cmdArgs = buildCommand(gogPath, parsed, settings.account);
 
+  if (cmdArgs === null) {
+    return {
+      content: `Unknown service/action combination: ${parsed.service}/${parsed.action}. Supported services: gmail, calendar, drive, docs, sheets, tasks, contacts, keep, people.`,
+      isError: true,
+    };
+  }
+
   // Add JSON output flag and no-input flag to every command
   // Insert -j and --no-input after the gog binary path
   const fullArgs = [cmdArgs[0], "-j", "--no-input", ...cmdArgs.slice(1)];
@@ -308,14 +316,13 @@ const execute: ToolExecutor = async (
     const timeoutId = setTimeout(() => child.kill("SIGKILL"), 30_000);
 
     try {
-      const [stdout, stderr] = await Promise.all([
+      const [status, stdout, stderr] = await Promise.all([
+        child.status,
         child.output(),
         child.stderrOutput(),
       ]);
 
       clearTimeout(timeoutId);
-
-      const status = child.status;
       const output = new TextDecoder().decode(stdout);
       const errorOutput = new TextDecoder().decode(stderr);
 
