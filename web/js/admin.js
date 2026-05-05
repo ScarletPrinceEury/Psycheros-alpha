@@ -512,6 +512,165 @@
     fileInput.value = "";
   };
 
+  /**
+   * Import conversations from entity-loom chats.db via streaming NDJSON.
+   * Reads progress events and updates the progress bar in real time.
+   */
+  window.adminImportChats = async function () {
+    var fileInput = document.getElementById("admin-migration-chat-files");
+    var btn = document.getElementById("admin-migration-chat-btn");
+    var progressSection = document.getElementById("admin-migration-chat-progress");
+    var progressFill = document.getElementById("admin-migration-chat-fill");
+    var progressText = document.getElementById("admin-migration-chat-text");
+    var outputEl = document.getElementById("admin-migration-chat-output");
+
+    if (!fileInput || !btn || !outputEl) return;
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+      alert("Please select a .db file.");
+      return;
+    }
+
+    var file = fileInput.files[0];
+    if (!file.name.endsWith(".db")) {
+      alert("Please select a .db file.");
+      return;
+    }
+
+    if (!confirm(
+      "Import conversations from " + file.name + " (" + (file.size / (1024 * 1024)).toFixed(1) + " MB)?\n\n" +
+      "Existing conversations are skipped by ID.\n" +
+      "New messages are merged (never overwritten).\n" +
+      "If RAG embedding is enabled, this may take several minutes."
+    )) {
+      return;
+    }
+
+    var doEmbed = document.getElementById("admin-migration-chat-embed")?.checked ?? true;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="admin-action-spinner"></span> Importing...';
+
+    if (progressSection) progressSection.style.display = "";
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressText) progressText.textContent = "Preparing...";
+    outputEl.style.display = "none";
+    outputEl.innerHTML = "";
+
+    try {
+      var formData = new FormData();
+      formData.append("file", file);
+      formData.append("embed", doEmbed ? "true" : "false");
+
+      var res = await fetch("/api/admin/data-migration/chats", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        var errorData = await res.json().catch(function () { return { error: res.statusText }; });
+        throw new Error(errorData.error || "Import failed");
+      }
+
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      var dbPhaseTotal = 0;
+      var embedPhaseTotal = 0;
+      var finalData = null;
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+
+        var lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line) continue;
+          try {
+            var evt = JSON.parse(line);
+          } catch (_) {
+            continue;
+          }
+
+          if (evt.phase === "db" && !evt.done) {
+            // DB phase progress
+            var pct = evt.total > 0 ? Math.round((evt.conversations_processed / evt.total) * 100) : 0;
+            if (progressFill) progressFill.style.width = pct + "%";
+            if (progressText) progressText.textContent = evt.status + " (" + evt.conversations_processed + "/" + evt.total + ")";
+            dbPhaseTotal = evt.total;
+          } else if (evt.phase === "db" && evt.done) {
+            // DB phase complete
+            if (progressFill) progressFill.style.width = "100%";
+            if (progressText) progressText.textContent = "Database import complete.";
+            finalData = evt;
+          } else if (evt.phase === "embed") {
+            // Embedding phase progress
+            var pct = evt.total > 0 ? Math.round((evt.current / evt.total) * 100) : 0;
+            if (progressFill) progressFill.style.width = pct + "%";
+            if (progressText) progressText.textContent = evt.status + " (" + evt.current + "/" + evt.total + ", " + evt.elapsed + ")";
+            embedPhaseTotal = evt.total;
+          } else if (evt.phase === "done") {
+            // All done
+            finalData = evt;
+          }
+        }
+      }
+
+      // Show final output
+      if (progressSection) progressSection.style.display = "none";
+      outputEl.style.display = "";
+
+      if (finalData) {
+        var lines = ["Chat import complete."];
+        lines.push("Conversations created: " + (finalData.conversations_created || 0));
+        if (finalData.conversations_forked) {
+          lines.push("Conversations forked (continued on both sides): " + finalData.conversations_forked);
+        }
+        if (finalData.conversations_up_to_date) {
+          lines.push("Conversations up to date: " + finalData.conversations_up_to_date);
+        }
+        lines.push("Messages imported: " + (finalData.messages_imported || 0));
+        if (finalData.messages_skipped) {
+          lines.push("Messages skipped (already exist): " + finalData.messages_skipped);
+        }
+        if (finalData.messages_embedded) {
+          lines.push("Messages embedded for RAG: " + finalData.messages_embedded);
+        }
+        if (finalData.messages_embed_skipped) {
+          lines.push("Embedding failures (skipped): " + finalData.messages_embed_skipped);
+        }
+        if (finalData.duration) {
+          lines.push("Duration: " + finalData.duration);
+        }
+
+        outputEl.innerHTML = '<div class="admin-action-output-header">'
+          + escapeHtmlForOutput(lines[0]) + '</div>'
+          + '<pre class="admin-action-output-pre">' + escapeHtmlForOutput(lines.join("\n")) + '</pre>';
+      } else {
+        outputEl.innerHTML = '<div class="admin-action-output-header admin-action-error">No response received</div>';
+      }
+    } catch (err) {
+      if (progressSection) progressSection.style.display = "none";
+      outputEl.style.display = "";
+      outputEl.innerHTML = '<div class="admin-action-output-header admin-action-error">'
+        + 'Request failed: ' + escapeHtmlForOutput(err.message) + '</div>';
+    }
+
+    // Restore button
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      + '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+      + '<polyline points="17 8 12 3 7 8"/>'
+      + '<line x1="12" y1="3" x2="12" y2="15"/>'
+      + '</svg> Import Conversations';
+
+    fileInput.value = "";
+  };
+
   // Format timestamps already on the page
   formatLocalTimes();
 

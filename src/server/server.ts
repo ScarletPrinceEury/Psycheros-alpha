@@ -219,6 +219,7 @@ import {
   handleAdminEntityDataExport,
   handleAdminEntityDataImport,
   handleAdminDataMigrationMemories,
+  handleAdminDataMigrationChats,
 } from "./admin-routes.ts";
 import { setServerStartTime } from "./diagnostics.ts";
 
@@ -1736,6 +1737,11 @@ export class Server {
     // POST /api/admin/data-migration/memories - Import memory .md files
     if (method === "POST" && path === "/api/admin/data-migration/memories") {
       return await handleAdminDataMigrationMemories(ctx, request);
+    }
+
+    // POST /api/admin/data-migration/chats - Import conversations from chats.db
+    if (method === "POST" && path === "/api/admin/data-migration/chats") {
+      return await handleAdminDataMigrationChats(ctx, request);
     }
 
     // ========================================
