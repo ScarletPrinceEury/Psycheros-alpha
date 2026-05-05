@@ -720,25 +720,38 @@ export function renderAdminEntityData(): string {
       <div class="admin-migration-output" id="admin-migration-daily-output" style="display:none"></div>
     </div>
 
-    <div class="admin-section admin-migration-placeholder">
+    <div class="admin-section">
       <h3 class="admin-section-title">Chat / Conversations</h3>
       <p class="admin-action-desc">
-        Merge conversation history from chats.db exports. Will merge conversations
-        by matching timestamps and participants, avoiding duplicates. <em>Coming soon.</em>
+        Merge conversation history from entity-loom's chats.db exports.
+        Existing conversations are skipped by ID (additive only — nothing is overwritten).
+        Messages are optionally embedded for RAG retrieval.
       </p>
       <div class="admin-action-form">
         <div class="admin-action-fields">
           <label class="admin-action-label" for="admin-migration-chat-files">Select .db file</label>
-          <input id="admin-migration-chat-files" type="file" accept=".db" class="admin-input" disabled />
+          <input id="admin-migration-chat-files" type="file" accept=".db" class="admin-input" />
         </div>
-        <button class="admin-action-btn admin-migration-disabled-btn" disabled>
+        <label class="admin-action-label admin-action-checkbox">
+          <input type="checkbox" id="admin-migration-chat-embed" checked class="admin-checkbox" />
+          Embed messages for RAG (may take several minutes for large imports)
+        </label>
+        <button id="admin-migration-chat-btn" class="admin-action-btn" onclick="window.adminImportChats()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          Coming Soon
+          Import Conversations
         </button>
       </div>
+      <div class="import-progress" id="admin-migration-chat-progress" style="display:none">
+        <div class="import-progress-bar">
+          <div class="import-progress-fill" id="admin-migration-chat-fill"></div>
+        </div>
+        <div class="import-progress-text" id="admin-migration-chat-text">Preparing...</div>
+      </div>
+      <div class="admin-migration-output" id="admin-migration-chat-output" style="display:none"></div>
     </div>
 
     <div class="admin-section admin-migration-placeholder">

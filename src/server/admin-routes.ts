@@ -8,6 +8,7 @@
  */
 
 import { join } from "@std/path";
+import { Database } from "@db/sqlite";
 import type { RouteContext } from "./routes.ts";
 import { queryLogs, getLogComponents, getLogLevelCounts, type LogLevel } from "./logger.ts";
 import { collectDiagnostics } from "./diagnostics.ts";
@@ -479,5 +480,383 @@ export async function handleAdminDataMigrationMemories(ctx: RouteContext, reques
       ...result, success: false,
       error: error instanceof Error ? error.message : String(error),
     }), { headers: JSON_HEADERS });
+  }
+}
+
+// ===== Chat DB Import (entity-loom) =====
+
+interface LoomConversation {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LoomMessage {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  reasoning_content: string | null;
+  tool_call_id: string | null;
+  tool_calls: string | null;
+  created_at: string;
+}
+
+interface ImportStats {
+  conversations_created: number;
+  conversations_forked: number;
+  conversations_up_to_date: number;
+  messages_imported: number;
+  messages_skipped: number;
+  messages_embedded: number;
+  messages_embed_skipped: number;
+}
+
+function emit(controller: ReadableStreamDefaultController, data: Record<string, unknown>) {
+  controller.enqueue(new TextEncoder().encode(JSON.stringify(data) + "\n"));
+}
+
+function formatElapsed(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/**
+ * POST /api/admin/data-migration/chats — Import conversations from entity-loom chats.db.
+ * Accepts multipart/form-data with 'file' (chats.db) and optional 'embed' (boolean).
+ * Returns streaming NDJSON with real-time progress.
+ */
+export async function handleAdminDataMigrationChats(ctx: RouteContext, request: Request): Promise<Response> {
+  try {
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const doEmbed = formData.get("embed") !== "false";
+
+    if (!file) {
+      return new Response(JSON.stringify({ error: "No file provided" }), {
+        status: 400,
+        headers: JSON_HEADERS,
+      });
+    }
+
+    if (!file.name.endsWith(".db")) {
+      return new Response(JSON.stringify({ error: "File must be a .db file" }), {
+        status: 400,
+        headers: JSON_HEADERS,
+      });
+    }
+
+    // Write uploaded file to temp location
+    const tmpDir = join(ctx.projectRoot, ".psycheros", "tmp");
+    await Deno.mkdir(tmpDir, { recursive: true });
+    const tempPath = join(tmpDir, `chat-import-${Date.now()}.db`);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await Deno.writeFile(tempPath, bytes);
+
+    // Validate the uploaded DB has the expected tables
+    let loomDb: Database;
+    try {
+      loomDb = new Database(tempPath);
+    } catch (e) {
+      await Deno.remove(tempPath).catch(() => {});
+      return new Response(JSON.stringify({ error: `Invalid SQLite file: ${e instanceof Error ? e.message : String(e)}` }), {
+        status: 400,
+        headers: JSON_HEADERS,
+      });
+    }
+
+    const tables = loomDb.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('conversations', 'messages')"
+    ).all<{ name: string }>();
+    loomDb.close();
+    const tableNames = new Set(tables.map(t => t.name));
+    if (!tableNames.has("conversations") || !tableNames.has("messages")) {
+      await Deno.remove(tempPath).catch(() => {});
+      return new Response(JSON.stringify({
+        error: "Invalid chats.db: missing 'conversations' or 'messages' table",
+      }), { status: 400, headers: JSON_HEADERS });
+    }
+
+    // Re-open for reading (we closed to validate, re-open)
+    loomDb = new Database(tempPath);
+
+    const psychDb = ctx.db.getRawDb();
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const overallStart = Date.now();
+        const stats: ImportStats = {
+          conversations_created: 0,
+          conversations_forked: 0,
+          conversations_up_to_date: 0,
+          messages_imported: 0,
+          messages_skipped: 0,
+          messages_embedded: 0,
+          messages_embed_skipped: 0,
+        };
+
+        try {
+          // === Phase 1: DB Import ===
+
+          // Query all conversations from loom DB
+          const loomConversations = loomDb.prepare(
+            "SELECT id, title, created_at, updated_at FROM conversations ORDER BY created_at"
+          ).all<LoomConversation>();
+
+          const totalConvs = loomConversations.length;
+          emit(controller, { phase: "db", status: "Importing conversations...", conversations_processed: 0, total: totalConvs });
+
+          for (let ci = 0; ci < loomConversations.length; ci++) {
+            const conv = loomConversations[ci];
+
+            // Check if conversation already exists in Psycheros
+            const existing = psychDb.prepare("SELECT updated_at FROM conversations WHERE id = ?").get<{ updated_at: string }>(conv.id);
+
+            if (!existing) {
+              // New conversation — insert it and all its messages
+              psychDb.exec("BEGIN TRANSACTION");
+              try {
+                psychDb.exec(
+                  "INSERT OR IGNORE INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                  [conv.id, conv.title, conv.created_at, conv.updated_at]
+                );
+
+                const messages = loomDb.prepare(
+                  "SELECT id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at"
+                ).all<LoomMessage>(conv.id);
+
+                for (const msg of messages) {
+                  psychDb.exec(
+                    "INSERT OR IGNORE INTO messages (id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    [msg.id, msg.conversation_id, msg.role, msg.content, msg.reasoning_content, msg.tool_call_id, msg.tool_calls, msg.created_at]
+                  );
+                }
+
+                psychDb.exec("COMMIT");
+                stats.conversations_created++;
+                stats.messages_imported += messages.length;
+              } catch {
+                psychDb.exec("ROLLBACK");
+              }
+            } else {
+              // Existing conversation — run fork detection
+              // Get the latest message timestamp in Psycheros for this conversation
+              const latestRow = psychDb.prepare(
+                "SELECT created_at FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1"
+              ).get<{ created_at: string }>(conv.id);
+
+              // Get messages from loom that are newer than Psycheros' latest
+              const postForkMessages = latestRow
+                ? loomDb.prepare(
+                    "SELECT id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at FROM messages WHERE conversation_id = ? AND created_at > ? ORDER BY created_at"
+                  ).all<LoomMessage>(conv.id, latestRow.created_at)
+                : loomDb.prepare(
+                    "SELECT id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at"
+                  ).all<LoomMessage>(conv.id);
+
+              // Check if any of those post-fork messages already exist in Psycheros
+              // (they shouldn't, since they're newer — but check to be safe)
+              if (postForkMessages.length === 0) {
+                stats.conversations_up_to_date++;
+              } else {
+                // Check if Psycheros has messages newer than the loom DB's latest
+                // (indicating conversation was continued in both places)
+                const psychNewest = latestRow?.created_at ?? "";
+                const loomNewest = conv.updated_at;
+                const hasFork = psychNewest > loomNewest;
+
+                if (hasFork) {
+                  // Fork detected — create a new conversation for the post-fork messages
+                  const forkId = crypto.randomUUID();
+                  const forkTitle = `${conv.title || "Untitled"} (continued)`;
+                  const firstMsgTs = postForkMessages[0].created_at;
+                  const lastMsgTs = postForkMessages[postForkMessages.length - 1].created_at;
+
+                  psychDb.exec("BEGIN TRANSACTION");
+                  try {
+                    psychDb.exec(
+                      "INSERT OR IGNORE INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                      [forkId, forkTitle, firstMsgTs, lastMsgTs]
+                    );
+
+                    for (const msg of postForkMessages) {
+                      psychDb.exec(
+                        "INSERT OR IGNORE INTO messages (id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [msg.id, forkId, msg.role, msg.content, msg.reasoning_content, msg.tool_call_id, msg.tool_calls, msg.created_at]
+                      );
+                    }
+
+                    psychDb.exec("COMMIT");
+                    stats.conversations_forked++;
+                    stats.messages_imported += postForkMessages.length;
+                    emit(controller, { phase: "db", status: "Fork detected: conversation continued on both sides", conversation_title: conv.title });
+                  } catch {
+                    psychDb.exec("ROLLBACK");
+                  }
+                } else {
+                  // No fork — just merge new messages into existing conversation
+                  psychDb.exec("BEGIN TRANSACTION");
+                  try {
+                    let newCount = 0;
+                    for (const msg of postForkMessages) {
+                      psychDb.exec(
+                        "INSERT OR IGNORE INTO messages (id, conversation_id, role, content, reasoning_content, tool_call_id, tool_calls, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [msg.id, msg.conversation_id, msg.role, msg.content, msg.reasoning_content, msg.tool_call_id, msg.tool_calls, msg.created_at]
+                      );
+                      newCount++;
+                    }
+
+                    // Update conversation's updated_at if new messages were added
+                    if (newCount > 0) {
+                      const lastTs = postForkMessages[postForkMessages.length - 1].created_at;
+                      psychDb.exec(
+                        "UPDATE conversations SET updated_at = ? WHERE id = ? AND updated_at < ?",
+                        [lastTs, conv.id, lastTs]
+                      );
+                    }
+
+                    psychDb.exec("COMMIT");
+                    stats.messages_imported += newCount;
+                    if (latestRow) {
+                      stats.messages_skipped += loomDb.prepare(
+                        "SELECT COUNT(*) as c FROM messages WHERE conversation_id = ? AND created_at <= ?"
+                      ).get<{ c: number }>(conv.id, latestRow.created_at)?.c ?? 0;
+                    }
+                  } catch {
+                    psychDb.exec("ROLLBACK");
+                  }
+                }
+              }
+            }
+
+            // Emit progress every 100 conversations or at the end
+            if ((ci + 1) % 100 === 0 || ci === loomConversations.length - 1) {
+              emit(controller, {
+                phase: "db",
+                status: "Importing conversations...",
+                conversations_processed: ci + 1,
+                total: totalConvs,
+              });
+            }
+          }
+
+          // Phase 1 done
+          emit(controller, {
+            phase: "db",
+            done: true,
+            conversations_created: stats.conversations_created,
+            conversations_forked: stats.conversations_forked,
+            conversations_up_to_date: stats.conversations_up_to_date,
+            messages_imported: stats.messages_imported,
+            messages_skipped: stats.messages_skipped,
+          });
+
+          // === Phase 2: Embedding ===
+          if (doEmbed && ctx.chatRAG) {
+            // Count messages needing embedding
+            const countRow = psychDb.prepare(
+              `SELECT COUNT(*) as c FROM messages
+               LEFT JOIN message_embeddings e ON messages.id = e.message_id
+               WHERE e.message_id IS NULL
+               AND messages.role != 'tool'
+               AND length(messages.content) >= 10`
+            ).get<{ c: number }>();
+
+            const totalToEmbed = countRow?.c ?? 0;
+
+            if (totalToEmbed === 0) {
+              emit(controller, { phase: "embed", status: "All messages already embedded.", current: 0, total: 0, elapsed: "0s" });
+            } else {
+              emit(controller, { phase: "embed", status: "Embedding messages for RAG...", current: 0, total: totalToEmbed, elapsed: "0s" });
+
+              const embedStart = Date.now();
+              const BATCH_SIZE = 100;
+              let embedded = 0;
+              let skipped = 0;
+
+              // Fetch messages in batches
+              let offset = 0;
+              while (offset < totalToEmbed) {
+                const batch = psychDb.prepare(
+                  `SELECT m.id, m.conversation_id, m.role, m.content FROM messages m
+                   LEFT JOIN message_embeddings e ON m.id = e.message_id
+                   WHERE e.message_id IS NULL
+                   AND m.role != 'tool'
+                   AND length(m.content) >= 10
+                   ORDER BY m.created_at
+                   LIMIT ? OFFSET ?`
+                ).all<{ id: string; conversation_id: string; role: string; content: string }>(BATCH_SIZE, offset);
+
+                if (batch.length === 0) break;
+
+                for (const msg of batch) {
+                  try {
+                    const result = await ctx.chatRAG!.indexMessage(
+                      msg.id,
+                      msg.conversation_id,
+                      msg.role as "user" | "assistant" | "system" | "tool",
+                      msg.content,
+                    );
+                    if (result) {
+                      stats.messages_embedded++;
+                    } else {
+                      skipped++;
+                    }
+                  } catch {
+                    skipped++;
+                  }
+                }
+
+                embedded += batch.length;
+                offset += batch.length;
+
+                emit(controller, {
+                  phase: "embed",
+                  status: "Embedding messages for RAG...",
+                  current: embedded,
+                  total: totalToEmbed,
+                  elapsed: formatElapsed(Date.now() - embedStart),
+                });
+              }
+
+              stats.messages_embed_skipped = skipped;
+            }
+          } else if (doEmbed && !ctx.chatRAG) {
+            emit(controller, { phase: "embed", status: "RAG not available — skipping embedding." });
+          }
+
+          // === Done ===
+          const duration = formatElapsed(Date.now() - overallStart);
+          emit(controller, {
+            phase: "done",
+            conversations_created: stats.conversations_created,
+            conversations_forked: stats.conversations_forked,
+            conversations_up_to_date: stats.conversations_up_to_date,
+            messages_imported: stats.messages_imported,
+            messages_skipped: stats.messages_skipped,
+            messages_embedded: stats.messages_embedded,
+            messages_embed_skipped: stats.messages_embed_skipped,
+            duration,
+          });
+
+        } finally {
+          loomDb.close();
+          await Deno.remove(tempPath).catch(() => {});
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: error instanceof Error ? error.message : String(error),
+    }), { status: 500, headers: JSON_HEADERS });
   }
 }
