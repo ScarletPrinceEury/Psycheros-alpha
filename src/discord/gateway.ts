@@ -95,6 +95,12 @@ const MIN_EDIT_INTERVAL_MS = 5500;
 /** Maximum concurrent message handlers */
 const MAX_CONCURRENT_HANDLERS = 5;
 
+/** Delay before attempting reconnect after disconnect (ms) */
+const RECONNECT_DELAY_MS = 5000;
+
+/** Maximum consecutive reconnect attempts before giving up */
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 // =============================================================================
 // Discord Gateway
 // =============================================================================
@@ -112,7 +118,11 @@ export class DiscordGateway {
   private activeHandlers = 0;
   private lastEditTime = 0;
   private pendingEdit: ReturnType<typeof setTimeout> | null = null;
+  private rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
   private conversationMap: Map<string, string> = new Map();
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private intentionalStop = false;
 
   constructor(private config: DiscordGatewayConfig) {}
 
@@ -136,6 +146,8 @@ export class DiscordGateway {
       return;
     }
 
+    this.intentionalStop = false;
+
     try {
       // Dynamically import discord.js (npm package in Deno)
       const { Client, GatewayIntentBits, Partials } = await import("discord.js");
@@ -148,15 +160,20 @@ export class DiscordGateway {
           GatewayIntentBits.DirectMessages,
         ],
         partials: [Partials.Channel, Partials.Message],
+        rest: {
+          // Enable discord.js built-in retry on 429 rate limits
+          retries: 3,
+          timeout: 30000,
+        },
       });
 
       this.client.on("ready", () => {
         this.running = true;
+        this.reconnectAttempts = 0;
         console.log(`[Discord] Gateway connected as ${this.client!.user?.tag ?? "unknown"}`);
       });
 
       this.client.on("messageCreate", (message) => {
-        // Deno.spawn to avoid blocking the event loop
         this.handleMessage(message).catch((error) => {
           console.error(
             "[Discord] Unhandled error in message handler:",
@@ -170,8 +187,9 @@ export class DiscordGateway {
       });
 
       this.client.on("disconnect", (event) => {
-        console.warn(`[Discord] Disconnected: ${event.reason || "unknown reason"}`);
+        console.warn(`[Discord] Disconnected: ${event.reason || "unknown reason"} (code: ${event.code})`);
         this.running = false;
+        this.scheduleReconnect();
       });
 
       await this.client.login(this.config.botToken);
@@ -185,13 +203,24 @@ export class DiscordGateway {
    * Stop the Discord Gateway connection gracefully.
    */
   async stop(): Promise<void> {
-    if (!this.client) return;
+    this.intentionalStop = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     this.running = false;
     if (this.pendingEdit) {
       clearTimeout(this.pendingEdit);
       this.pendingEdit = null;
     }
+    if (this.rateLimitTimer) {
+      clearTimeout(this.rateLimitTimer);
+      this.rateLimitTimer = null;
+    }
+
+    if (!this.client) return;
 
     try {
       this.client.destroy();
@@ -213,6 +242,37 @@ export class DiscordGateway {
     return this.running && this.client !== null;
   }
 
+  /**
+   * Schedule a reconnect attempt after disconnect.
+   * Uses exponential backoff: 5s, 10s, 20s, 40s, ...up to 2.5 minutes.
+   */
+  private scheduleReconnect(): void {
+    if (this.intentionalStop) return;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.error(`[Discord] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
+      return;
+    }
+
+    const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts), 150_000);
+    this.reconnectAttempts++;
+
+    console.log(`[Discord] Reconnect attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${(delay / 1000).toFixed(1)}s`);
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        if (this.client) {
+          console.log("[Discord] Attempting reconnect...");
+          await this.client.login(this.config.botToken);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(`[Discord] Reconnect failed: ${msg}`);
+        this.scheduleReconnect();
+      }
+    }, delay);
+  }
+
   // ===========================================================================
   // Helpers
   // ===========================================================================
@@ -228,6 +288,7 @@ export class DiscordGateway {
     if ("send" in channel && typeof channel.send === "function") {
       return await channel.send(content);
     }
+    console.warn("[Discord] Cannot send to channel: no .send() method (PartialGroupDMChannel?)");
     return undefined;
   }
 
@@ -249,9 +310,6 @@ export class DiscordGateway {
       console.log("[Discord] Too many concurrent handlers, dropping message");
       return;
     }
-
-    const content = message.content?.trim();
-    if (!content) return;
 
     // Determine if this is a DM or channel message
     const isDM = message.channel.isDMBased();
@@ -277,16 +335,23 @@ export class DiscordGateway {
     // Get or create conversation for this Discord channel
     const conversationId = this.getOrCreateConversation(channelId, isDM, message.author.username);
 
-    // Handle image attachments
-    let userMessage = content;
+    // Build user message — handle both text and image-only messages
+    const textContent = message.content?.trim() ?? "";
+    let userMessage = textContent;
+
+    // Handle image attachments (also catches image-only messages now)
     if (message.attachments.size > 0) {
       const imageAttachment = message.attachments.find((a) =>
         a.contentType?.startsWith("image/")
       );
       if (imageAttachment) {
-        userMessage = `[USER_IMAGE: ${imageAttachment.url}] ${content}`;
+        const prefix = userMessage ? `[USER_IMAGE: ${imageAttachment.url}] ` : `[USER_IMAGE: ${imageAttachment.url}]`;
+        userMessage = prefix + userMessage;
       }
     }
+
+    // Skip if no content at all (not even attachments)
+    if (!userMessage) return;
 
     this.activeHandlers++;
 
@@ -340,8 +405,8 @@ export class DiscordGateway {
       if (canStreamEdits) {
         try {
           botMessage = await this.sendToChannel(triggerMessage.channel, "...") ?? null;
-        } catch {
-          // May not have permission to send
+        } catch (error) {
+          console.warn("[Discord] Could not send thinking indicator:", error instanceof Error ? error.message : String(error));
         }
       }
 
@@ -356,8 +421,8 @@ export class DiscordGateway {
             if (this.config.gatewaySettings.showToolExecution && botMessage) {
               try {
                 await botMessage.react("⚙️");
-              } catch {
-                // May not have permission
+              } catch (error) {
+                console.debug("[Discord] Cannot add tool_call reaction:", error instanceof Error ? error.message : String(error));
               }
             }
             break;
@@ -366,8 +431,8 @@ export class DiscordGateway {
             if (this.config.gatewaySettings.showToolExecution && botMessage) {
               try {
                 await botMessage.react("✅");
-              } catch {
-                // May not have permission
+              } catch (error) {
+                console.debug("[Discord] Cannot add tool_result reaction:", error instanceof Error ? error.message : String(error));
               }
             }
             break;
@@ -410,6 +475,10 @@ export class DiscordGateway {
         clearTimeout(this.pendingEdit);
         this.pendingEdit = null;
       }
+      if (this.rateLimitTimer) {
+        clearTimeout(this.rateLimitTimer);
+        this.rateLimitTimer = null;
+      }
 
       // Post the final response
       const discordContent = stripMarkdownForDiscord(fullContent);
@@ -420,22 +489,28 @@ export class DiscordGateway {
           const chunks = splitDiscordMessage(discordContent);
           try {
             await botMessage.edit(chunks[0]);
-          } catch {
-            // Edit may fail due to rate limit — send new message instead
+          } catch (error) {
+            console.warn("[Discord] Final edit failed, sending as new message:", error instanceof Error ? error.message : String(error));
+            try {
+              await this.sendToChannel(triggerMessage.channel, chunks[0]);
+            } catch {
+              // Give up
+            }
           }
           // Send remaining chunks as follow-up messages
           for (let i = 1; i < chunks.length; i++) {
             try {
               await this.sendToChannel(triggerMessage.channel, chunks[i]);
-            } catch {
+            } catch (error) {
+              console.warn("[Discord] Failed to send follow-up chunk:", error instanceof Error ? error.message : String(error));
               break;
             }
           }
         } else {
           try {
             await botMessage.delete();
-          } catch {
-            // Ignore delete failure
+          } catch (error) {
+            console.debug("[Discord] Could not delete empty placeholder:", error instanceof Error ? error.message : String(error));
           }
         }
       } else {
@@ -445,7 +520,8 @@ export class DiscordGateway {
           for (const chunk of chunks) {
             try {
               await this.sendToChannel(triggerMessage.channel, chunk);
-            } catch {
+            } catch (error) {
+              console.warn("[Discord] Failed to send message:", error instanceof Error ? error.message : String(error));
               break;
             }
           }
@@ -463,14 +539,14 @@ export class DiscordGateway {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`[Discord] Error processing message in ${conversationId}:`, errorMsg);
 
-      // Send error to Discord
+      // Send a safe error message to Discord — don't leak internal details
       try {
         await this.sendToChannel(
           triggerMessage.channel,
-          `⚠️ Error processing message: ${errorMsg.substring(0, 500)}`,
+          "⚠️ Something went wrong processing that message. Check the server logs for details.",
         );
-      } catch {
-        // Ignore
+      } catch (error) {
+        console.warn("[Discord] Could not send error message:", error instanceof Error ? error.message : String(error));
       }
 
       // Signal error to web UI
@@ -493,6 +569,11 @@ export class DiscordGateway {
   private scheduleEdit(message: import("discord.js").Message, content: string): void {
     if (this.pendingEdit) {
       clearTimeout(this.pendingEdit);
+      this.pendingEdit = null;
+    }
+    if (this.rateLimitTimer) {
+      clearTimeout(this.rateLimitTimer);
+      this.rateLimitTimer = null;
     }
 
     this.pendingEdit = setTimeout(async () => {
@@ -503,7 +584,11 @@ export class DiscordGateway {
       const elapsed = now - this.lastEditTime;
       if (elapsed < MIN_EDIT_INTERVAL_MS) {
         const delay = MIN_EDIT_INTERVAL_MS - elapsed;
-        setTimeout(() => this.doEdit(message, content), delay);
+        // Track this deferred edit so it can be cancelled
+        this.rateLimitTimer = setTimeout(() => {
+          this.rateLimitTimer = null;
+          this.doEdit(message, content);
+        }, delay);
         return;
       }
 
@@ -527,10 +612,11 @@ export class DiscordGateway {
       await message.edit(truncated);
       this.lastEditTime = Date.now();
     } catch (error) {
-      // Rate limited or other error — silently skip this edit
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("429")) {
         console.debug("[Discord] Edit rate limited, will retry on next chunk");
+      } else {
+        console.debug("[Discord] Edit failed:", msg);
       }
     }
   }
