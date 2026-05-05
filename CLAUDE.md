@@ -78,7 +78,7 @@ PSYCHEROS_MCP_ENABLED=true deno task dev
 | `src/pulse/timezone.ts` | Timezone conversion for local↔UTC Pulse scheduling |
 | `src/tools/pulse-tools.ts` | Entity-facing Pulse tools (create, trigger, delete) |
 | `src/server/entity-data.ts` | Entity data export/import — orchestrates zip backup across entity-core and Psycheros |
-| `src/server/admin-routes.ts` | Admin panel route handlers — includes data migration memory import |
+| `src/server/admin-routes.ts` | Admin panel route handlers — includes data migration (memory files, entity-loom chats.db with streaming NDJSON) |
 
 ## Situational Awareness
 
